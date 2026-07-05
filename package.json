@@ -1,9 +1,25 @@
 {
-  "name": "phara-o-editor",
-  "version": "0.1.0",
+  "name": "phara-o-mini-app",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Editor/Librarian for the Behringer Phara-O Mini synthesizer over Web MIDI",
+  "description": "Web MIDI editor, librarian and step sequencer for the Behringer Phara-O Mini synthesizer",
+  "author": "Vlastimil Červený",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vlastimilcerveny34/phara-o-mini-app.git"
+  },
+  "keywords": [
+    "web-midi",
+    "midi",
+    "synthesizer",
+    "behringer",
+    "phara-o",
+    "sequencer",
+    "sveltekit",
+    "svelte"
+  ],
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",

@@ -1,17 +1,22 @@
-# Phara-O Mini — Editor / Librarian
+# Phara-O Mini — Web MIDI Editor · Librarian · Sequencer
 
-A web app to control the **Behringer Phara-O Mini** synthesizer over the
+A browser app to control the **Behringer Phara-O Mini** synthesizer over the
 **Web MIDI API**. No backend, no Electron. The synth has no display, so the
 whole point of this app is to **show you the numeric value** of every parameter
-as you change it.
+as you change it — and, beyond editing, to **play and sequence** the synth from
+the computer.
+
+> **Status: beta (0.2.x).** Core editor, snapshot librarian, MIDI-clock
+> transport and a monophonic step sequencer are working. More is planned — see
+> [Roadmap](#roadmap).
 
 ## Design premise (read this)
 
 The app is **one-way: app → synth**. The hardware has no encoders and no SysEx
 state dump, so the app **cannot read the physical knob positions**. For every
 parameter it controls, the app is authoritative: you set a value in the UI, the
-UI displays it and sends it as a MIDI CC. If a physical knob and the app value
-drift apart, that's expected — not a bug.
+UI displays it and sends it as a MIDI CC (or a MIDI note, for the sequencer). If
+a physical knob and the app value drift apart, that's expected — not a bug.
 
 ## Running locally
 
@@ -32,41 +37,71 @@ npm run preview    # preview the production build
 ```
 
 When the page loads, click **Connect MIDI** and allow the permission prompt.
-The output port whose name contains `PHARA-O` is auto-selected (marked ★).
+The output port whose name contains `PHARA-O` is auto-selected (marked ★); the
+ALSA "Midi Through" port is filtered out.
 
 ### Make the synth actually listen
 
-For the Phara-O to react to incoming USB MIDI, its MIDI receive must be on:
+Set these on the hardware (most are power-on options — hold the key while
+powering up; see the manual):
 
-- **CC receive:** enable **MIDI Rx** — that's all the controls on this page need.
-- **Tempo over clock (future):** will need **Clock Source = USB MIDI**
-  (hold **FUNC + key 7** while powering on). Not implemented yet.
+- **MIDI Rx = ON** (FUNC + key 13) — required for the synth to receive CC **and**
+  the sequencer's notes.
 - Match the **MIDI channel** in the app to the synth's channel (default 1).
+- **Optional — slave the synth's tempo:** Clock Source = USB MIDI (FUNC + key 7)
+  **and** 24 ppqn (FUNC + key 11). Only needed if you want the synth's *own*
+  sequencer/arp/tempo-delay to follow the app's clock. The app's step sequencer
+  does **not** need this — it sends notes itself.
 
 ## What it controls
 
-Data comes verbatim from the official MIDI implementation chart and lives in one
+Parameter data comes from the official MIDI implementation chart and lives in one
 typed config, [`src/lib/params.ts`](src/lib/params.ts) — the single source of
 truth. The UI panel is just a map over it.
 
-- **14 continuous CC params** (0–127) — sliders with a big live value readout.
+- **13 continuous CC params** (0–127) — sliders with a big live value readout.
 - **Stepped params** (Voice Mode CC 40, Scale CC 41) — named-option selectors.
   For bands we transmit the **middle** of each band to avoid the chart's
   overlapping Voice Mode boundaries (Unison Ring = 100, Poly Ring = 120).
-- **Not controllable (shown disabled):** Resonance & Dry/Wet (no CC in the
-  chart; NRPN numbers unknown — control on the hardware), and Tempo (MIDI clock,
-  phase 2). We do **not** guess NRPN numbers.
+- **Not MIDI-controllable (shown disabled):** Volume, Resonance and Dry/Wet —
+  they are absent from the CC chart and there is no NRPN for them either, so they
+  must be set on the hardware. We do **not** guess MIDI numbers.
 
-## Snapshot librarian
+## Transport (MIDI clock master)
 
-The Phara-O has only 10 patch slots and forgets switch positions. A **snapshot**
-captures the app-side value of every controllable parameter as a JSON **file**
-(download / upload — no browser storage).
+A **look-ahead scheduler** emits MIDI Start/Stop + 24-PPQN clock so the synth (in
+USB-clock mode) can slave its tempo to the computer. Tempo 20–300 BPM. The same
+scheduler drives the step sequencer, so future arp/sequencer features attach to
+it as clock consumers rather than spinning their own timers.
 
-- **Save snapshot** — downloads `<name>.phara-o.json`.
-- **Load snapshot** — reads a JSON file, updates the UI, and sends every value
-  to the synth sequentially with a small gap (~8 ms) so the MIDI buffer isn't
-  flooded.
+## Step sequencer
+
+A **monophonic** step sequencer that plays the synth by sending MIDI notes timed
+off the transport clock — so it works **regardless of the synth's clock source**
+(it only needs MIDI Rx = ON).
+
+- 16 steps, adjustable pattern length, rate 1/8 · 1/16 · 1/32.
+- Per step: note, velocity and gate length. Velocity is a real **enhancement** —
+  the synth's own touch keyboard isn't velocity-sensitive.
+- Live playhead; "Send notes" enable; save/load patterns as `.seq` files.
+
+Polyphony and per-step parameter locks are planned.
+
+## Librarian & factory patches
+
+The Phara-O has only 10 patch slots and forgets switch positions, so an app-side
+library is effectively unlimited. Patches are **files** (download / upload — no
+browser storage).
+
+- **Save / Load patch** — JSON files with a `.snp` extension.
+- **10 factory patches** built in (Classic Bass, Sub Bass, Saw Lead, Soft Pad,
+  Pluck Keys, Brass Stab, Fifth Lead, Octave Stack, Ring Bell, LFO Sweep) — one
+  click applies them (Resonance/Dry-Wet excepted, as those have no CC).
+
+Loading a patch sends every value to the synth sequentially with a small gap
+(~8 ms) so the MIDI buffer isn't flooded. Patch (`.snp`) and pattern (`.seq`)
+files are distinguished by an internal `format` field, with a friendly error if
+you load one where the other belongs.
 
 ## Project structure
 
@@ -75,25 +110,48 @@ src/
 ├── app.css                      global tokens/theme
 ├── lib/
 │   ├── params.ts                PARAMS — single source of truth (typed)
-│   ├── midi.svelte.ts           Web MIDI service (runes state, sendCC/sendBatch)
+│   ├── midi.svelte.ts           Web MIDI service (CC, notes, clock, raw)
 │   ├── paramState.svelte.ts     reactive parameter state; sends CC on change
-│   ├── snapshot.ts              capture / download / parse / apply snapshots
+│   ├── transport.svelte.ts      MIDI clock master + look-ahead tick scheduler
+│   ├── sequencer.svelte.ts      monophonic step sequencer engine
+│   ├── snapshot.ts              capture / download / parse / apply patches
+│   ├── factoryPatches.ts        10 built-in starter patches
 │   └── components/
 │       ├── MidiSetup.svelte
 │       ├── ContinuousControl.svelte
 │       ├── SteppedControl.svelte
 │       ├── UnavailableControl.svelte
+│       ├── TransportControl.svelte
+│       ├── SequencerControl.svelte
 │       ├── SnapshotBar.svelte
-│       └── HardwareNote.svelte
+│       └── HardwareNote.svelte  (currently unused; earmarked for a Help section)
 └── routes/
     ├── +layout.ts               ssr = false (Web MIDI is browser-only)
     ├── +layout.svelte
-    └── +page.svelte             panel: maps over PARAMS by group
+    └── +page.svelte             the panel + transport + sequencer + librarian
 ```
 
-## Not in v1 (by design)
+## By design / not (yet) supported
 
-- No MIDI clock / tempo generation (phase 2).
-- No reading state from the hardware (not possible).
-- No `localStorage` / `sessionStorage`.
-- No guessed NRPN numbers for Resonance / Dry-Wet.
+- **No reading state from the hardware** — not possible (one-way).
+- **No `localStorage` / `sessionStorage`** — patches and patterns are files.
+- **No guessed NRPN/SysEx numbers** — if it isn't documented, we don't send it.
+- The Behringer manual PDF is **not** included in this repo (it's copyrighted).
+
+## Roadmap
+
+- Alternative **"Synth UI"** (graphical, knob-style) with a toggle to the current
+  parametric view.
+- **On-screen keyboard** + **MIDI IN** (play the synth / bridge an external
+  controller / record into the sequencer).
+- **In-app arpeggiator**, **polyphonic** steps, **parameter locks**, swing,
+  accents, pattern chaining.
+- Live **clock-source switching over SysEx** (once the SynthTribe message is
+  captured), to avoid the hardware's power-on reboot.
+
+## License
+
+[MIT](LICENSE) © 2026 Vlastimil Červený.
+
+This project is not affiliated with or endorsed by Behringer / Music Tribe.
+"Phara-O Mini" is a trademark of its respective owner.
