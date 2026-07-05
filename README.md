@@ -3,20 +3,27 @@
 A browser app to control the **Behringer Phara-O Mini** synthesizer over the
 **Web MIDI API**. No backend, no Electron. The synth has no display, so the
 whole point of this app is to **show you the numeric value** of every parameter
-as you change it — and, beyond editing, to **play and sequence** the synth from
-the computer.
+as you change it — and, beyond editing, to **play, record and sequence** the
+synth from the computer.
 
-> **Status: beta (0.2.x).** Core editor, snapshot librarian, MIDI-clock
-> transport and a monophonic step sequencer are working. More is planned — see
+> **Status: beta (0.3.x).** Core editor, snapshot librarian, MIDI-clock
+> transport, a monophonic step sequencer, note sources (on-screen keyboard +
+> MIDI input) and step/live recording are working. More is planned — see
 > [Roadmap](#roadmap).
 
 ## Design premise (read this)
 
-The app is **one-way: app → synth**. The hardware has no encoders and no SysEx
-state dump, so the app **cannot read the physical knob positions**. For every
-parameter it controls, the app is authoritative: you set a value in the UI, the
-UI displays it and sends it as a MIDI CC (or a MIDI note, for the sequencer). If
-a physical knob and the app value drift apart, that's expected — not a bug.
+The app is **one-way to the synth: app → synth**. The hardware has no encoders
+and no SysEx state dump, so the app **cannot read the physical knob positions**.
+For every parameter it controls, the app is authoritative: you set a value in the
+UI, the UI displays it and sends it as a MIDI CC (or a MIDI note, for the
+sequencer). If a physical knob and the app value drift apart, that's expected —
+not a bug.
+
+MIDI **input** exists only as a *note source*: an external keyboard plays
+*through the app* to the synth (and can record into the sequencer). That is a
+controller feeding the app — still not reading the synth's own state. A keyboard
+wired **directly** into the synth bypasses the app entirely (by design).
 
 ## Running locally
 
@@ -74,6 +81,20 @@ USB-clock mode) can slave its tempo to the computer. Tempo 20–300 BPM. The sam
 scheduler drives the step sequencer, so future arp/sequencer features attach to
 it as clock consumers rather than spinning their own timers.
 
+## Note sources (keyboard + MIDI input)
+
+The app can also be **played** as an instrument, acting as a software MIDI
+bridge (`note source → app → synth`). Two sources feed the same layer:
+
+- **On-screen keyboard** — two octaves, mouse (click / glissando) or **QWERTY**
+  computer keys (`A`–`L` / `W`–`P` rows, `z`/`x` shift octave), with an octave
+  shift and a velocity slider (the synth *does* respond to velocity).
+- **MIDI input** — pick an input port in MIDI Setup; an external keyboard plays
+  straight through to the synth and lights up the on-screen keys. Output is
+  always forced onto the app's selected synth channel.
+
+A **Panic** button sends All Notes Off if anything hangs.
+
 ## Step sequencer
 
 A **monophonic** step sequencer that plays the synth by sending MIDI notes timed
@@ -84,6 +105,13 @@ off the transport clock — so it works **regardless of the synth's clock source
 - Per step: note, velocity and gate length. Velocity is a real **enhancement** —
   the synth's own touch keyboard isn't velocity-sensitive.
 - Live playhead; "Send notes" enable; save/load patterns as `.seq` files.
+- **Recording from a note source** (keyboard or MIDI input), armed with the
+  **Record** button:
+  - **Step** — play a note to fill the cursor step and advance; `←`/`→` (or the
+    arrow keys) move the cursor without erasing; click a pad to place the cursor.
+    No running clock needed.
+  - **Live** — with the transport playing, played notes quantize to the nearest
+    step and how long you hold a note sets its gate.
 
 Polyphony and per-step parameter locks are planned.
 
@@ -110,10 +138,11 @@ src/
 ├── app.css                      global tokens/theme
 ├── lib/
 │   ├── params.ts                PARAMS — single source of truth (typed)
-│   ├── midi.svelte.ts           Web MIDI service (CC, notes, clock, raw)
+│   ├── midi.svelte.ts           Web MIDI service (CC, notes, clock, in + out)
 │   ├── paramState.svelte.ts     reactive parameter state; sends CC on change
 │   ├── transport.svelte.ts      MIDI clock master + look-ahead tick scheduler
-│   ├── sequencer.svelte.ts      monophonic step sequencer engine
+│   ├── noteSource.svelte.ts     held-notes layer (keyboard + MIDI in → synth)
+│   ├── sequencer.svelte.ts      monophonic step sequencer + step/live recording
 │   ├── snapshot.ts              capture / download / parse / apply patches
 │   ├── factoryPatches.ts        10 built-in starter patches
 │   └── components/
@@ -122,6 +151,8 @@ src/
 │       ├── SteppedControl.svelte
 │       ├── UnavailableControl.svelte
 │       ├── TransportControl.svelte
+│       ├── Keyboard.svelte              on-screen piano (mouse + QWERTY)
+│       ├── NoteSourceControl.svelte     note sources panel (thru + panic)
 │       ├── SequencerControl.svelte
 │       ├── SnapshotBar.svelte
 │       └── HardwareNote.svelte  (currently unused; earmarked for a Help section)
@@ -140,14 +171,19 @@ src/
 
 ## Roadmap
 
+- **In-app arpeggiator** — consumes the held notes from the note sources, synced
+  to the transport clock (next up).
 - Alternative **"Synth UI"** (graphical, knob-style) with a toggle to the current
   parametric view.
-- **On-screen keyboard** + **MIDI IN** (play the synth / bridge an external
-  controller / record into the sequencer).
-- **In-app arpeggiator**, **polyphonic** steps, **parameter locks**, swing,
-  accents, pattern chaining.
+- **Polyphonic** steps, **parameter locks**, swing, accents, pattern chaining.
 - Live **clock-source switching over SysEx** (once the SynthTribe message is
   captured), to avoid the hardware's power-on reboot.
+
+### Done since 0.2.x
+
+- On-screen keyboard + MIDI input note sources (play the synth / bridge an
+  external controller).
+- Step and live **recording** into the sequencer.
 
 ## License
 

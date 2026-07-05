@@ -11,6 +11,7 @@
 
 import { transport, type TickConsumer } from './transport.svelte';
 import { midi } from './midi.svelte';
+import { noteSources } from './noteSource.svelte';
 
 export const MAX_STEPS = 16;
 export const MIN_NOTE = 24; // C1
@@ -66,6 +67,9 @@ function defaultSteps(): Step[] {
 }
 
 const clampNote = (n: number) => Math.min(MAX_NOTE, Math.max(MIN_NOTE, Math.round(n)));
+const clampVel = (v: number) => Math.min(127, Math.max(1, Math.round(v)));
+
+export type RecordMode = 'step' | 'live';
 
 class Sequencer implements TickConsumer {
 	/** Always MAX_STEPS long; `length` decides how many actually play. */
@@ -77,8 +81,27 @@ class Sequencer implements TickConsumer {
 	/** Currently lit step for the playhead; -1 when stopped. */
 	currentStep = $state(-1);
 
+	// --- recording -----------------------------------------------------------
+	/** The one highlighted step: what the detail editor edits AND where step
+	 * recording writes. Clicking a pad, the arrows, and playing a note all move it. */
+	cursor = $state(0);
+	/** Armed to write played notes into the grid. */
+	recording = $state(false);
+	/** 'step' = note fills cursor + advances; 'live' = quantize while playing. */
+	recordMode = $state<RecordMode>('step');
+
+	/** Recent step boundaries (index + real sounding time) for live quantize. */
+	#stepMarks: { index: number; time: number }[] = [];
+	/** Notes currently held during live record, to derive gate on release. */
+	#liveNotes = new Map<number, { index: number; timeOn: number }>();
+
 	constructor() {
 		transport.subscribe(this);
+		// Observe played notes (on-screen keyboard + MIDI input) for recording.
+		noteSources.subscribe({
+			onNoteOn: (note, velocity) => this.recordNoteOn(note, velocity),
+			onNoteOff: (note) => this.recordNoteOff(note)
+		});
 	}
 
 	/** Milliseconds per step at the current tempo + resolution. */
@@ -98,6 +121,18 @@ class Sequencer implements TickConsumer {
 
 	setLength(n: number) {
 		this.length = Math.min(MAX_STEPS, Math.max(1, Math.round(n)));
+		if (this.cursor >= this.length) this.cursor = this.length - 1;
+	}
+
+	/** Move the highlighted step (click / arrows). Wraps within the active length. */
+	setCursor(i: number) {
+		this.cursor = Math.min(this.length - 1, Math.max(0, Math.round(i)));
+	}
+	cursorLeft() {
+		this.cursor = (this.cursor - 1 + this.length) % this.length;
+	}
+	cursorRight() {
+		this.cursor = (this.cursor + 1) % this.length;
 	}
 
 	clearAll() {
@@ -108,21 +143,87 @@ class Sequencer implements TickConsumer {
 
 	onStart() {
 		this.currentStep = -1;
+		this.#stepMarks = [];
 	}
 
 	onTick(tick: number, time: number) {
-		if (!this.enabled) return;
 		if (tick % this.ticksPerStep !== 0) return; // only act on step boundaries
 		const index = Math.floor(tick / this.ticksPerStep) % this.length;
 		this.currentStep = index;
-		this.#playStep(index, time);
+		// Remember boundary times so live recording can quantize incoming notes to
+		// the nearest step in real time (the scheduler runs ahead of the audio).
+		this.#stepMarks.push({ index, time });
+		if (this.#stepMarks.length > 8) this.#stepMarks.shift();
+		if (this.enabled) this.#playStep(index, time);
 	}
 
 	onStop() {
 		this.currentStep = -1;
+		this.#stepMarks = [];
+		this.#liveNotes.clear();
 		// Cancel any note-on/off already scheduled ahead, then silence everything.
 		midi.clearScheduled();
 		midi.allNotesOff();
+	}
+
+	// --- recording -----------------------------------------------------------
+
+	toggleRecord() {
+		this.recording = !this.recording;
+		this.#liveNotes.clear();
+	}
+
+	setRecordMode(mode: RecordMode) {
+		this.recordMode = mode;
+		this.#liveNotes.clear();
+	}
+
+	/** Write a played note into a step (used by both record modes). */
+	#writeStep(index: number, note: number, velocity: number) {
+		const step = this.steps[index];
+		if (!step) return;
+		step.on = true;
+		step.note = clampNote(note);
+		step.velocity = clampVel(velocity);
+	}
+
+	/** Nearest step index to a wall-clock time, from the boundary marks. */
+	#nearestStep(now: number): number {
+		let best = this.currentStep >= 0 ? this.currentStep : 0;
+		let bestDelta = Infinity;
+		for (const m of this.#stepMarks) {
+			const d = Math.abs(m.time - now);
+			if (d < bestDelta) {
+				bestDelta = d;
+				best = m.index;
+			}
+		}
+		return best;
+	}
+
+	recordNoteOn(note: number, velocity: number) {
+		if (!this.recording) return;
+		if (this.recordMode === 'step') {
+			this.#writeStep(this.cursor, note, velocity);
+			this.cursorRight();
+		} else {
+			if (!transport.isPlaying) return; // live needs the clock running
+			const now = performance.now();
+			const index = this.#nearestStep(now);
+			this.#writeStep(index, note, velocity);
+			this.#liveNotes.set(note, { index, timeOn: now });
+		}
+	}
+
+	recordNoteOff(note: number) {
+		if (!this.recording || this.recordMode !== 'live') return;
+		const rec = this.#liveNotes.get(note);
+		if (!rec) return;
+		this.#liveNotes.delete(note);
+		// Turn how long the note was held into a gate fraction of one step.
+		const dur = performance.now() - rec.timeOn;
+		const gate = Math.min(1, Math.max(0.05, dur / this.stepMs));
+		if (this.steps[rec.index]) this.steps[rec.index].gate = gate;
 	}
 
 	#playStep(index: number, time: number) {

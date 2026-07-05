@@ -3,6 +3,7 @@
 	import { midi } from '$lib/midi.svelte';
 	import MidiSetup from '$lib/components/MidiSetup.svelte';
 	import TransportControl from '$lib/components/TransportControl.svelte';
+	import NoteSourceControl from '$lib/components/NoteSourceControl.svelte';
 	import SequencerControl from '$lib/components/SequencerControl.svelte';
 	import SnapshotBar from '$lib/components/SnapshotBar.svelte';
 	import ContinuousControl from '$lib/components/ContinuousControl.svelte';
@@ -80,6 +81,8 @@
 	</main>
 
 	<SequencerControl />
+
+	<NoteSourceControl />
 
 	<SnapshotBar />
 

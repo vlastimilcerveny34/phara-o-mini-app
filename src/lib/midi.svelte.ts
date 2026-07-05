@@ -1,9 +1,15 @@
 /**
  * Web MIDI service — the only place that talks to the MIDI subsystem.
  *
- * Responsibilities: request access, enumerate output ports, keep the chosen
- * port + channel, and send Control Change messages. The app is one-way
- * (app -> synth), so there is no input handling here by design.
+ * Responsibilities: request access, enumerate output AND input ports, keep the
+ * chosen ports + channel, send Control Change / Note messages, and dispatch
+ * incoming Note On/Off from the selected input port.
+ *
+ * Note on direction: CC control stays strictly one-way (app -> synth) — we never
+ * read synth state. Input handling exists only to let the app act as a note
+ * source bridge: an external MIDI keyboard (or the on-screen keyboard) plays
+ * *through* the app to the synth, so those notes can also feed the sequencer/arp.
+ * A keyboard wired directly into the synth bypasses the app entirely (by design).
  *
  * State fields are Svelte 5 runes, so components can read them directly and
  * stay reactive without any manual subscription.
@@ -42,15 +48,31 @@ const NOTE_ON_STATUS = 0x90; // Note On, channel added in low nibble
 const NOTE_OFF_STATUS = 0x80; // Note Off, channel added in low nibble
 const CC_ALL_NOTES_OFF = 123;
 
+/** A parsed note event coming in from the selected MIDI input port. */
+export type NoteInput = {
+	type: 'on' | 'off';
+	note: number; // 0-127
+	velocity: number; // 0-127 (0 for note-off)
+};
+
+/** Handler invoked for each incoming note event; returns an unsubscribe fn. */
+export type NoteInputHandler = (ev: NoteInput) => void;
+
 class MidiService {
 	status = $state<MidiStatus>('idle');
 	errorMessage = $state('');
 	outputs = $state<MidiPort[]>([]);
 	selectedPortId = $state<string | null>(null);
+	inputs = $state<MidiPort[]>([]);
+	/** null = no input listened to (default); notes only come from on-screen kbd. */
+	selectedInputId = $state<string | null>(null);
 	/** MIDI channel as shown to the user: 1-16. Wire value is channel-1. */
 	channel = $state(1);
 
 	#access: MIDIAccess | null = null;
+	/** The input we currently have an onmidimessage handler attached to. */
+	#boundInput: MIDIInput | null = null;
+	#noteHandlers = new Set<NoteInputHandler>();
 
 	constructor() {
 		if (typeof navigator === 'undefined' || !('requestMIDIAccess' in navigator)) {
@@ -60,6 +82,10 @@ class MidiService {
 
 	get selectedPort(): MidiPort | null {
 		return this.outputs.find((p) => p.id === this.selectedPortId) ?? null;
+	}
+
+	get selectedInput(): MidiPort | null {
+		return this.inputs.find((p) => p.id === this.selectedInputId) ?? null;
 	}
 
 	get isReady(): boolean {
@@ -75,8 +101,12 @@ class MidiService {
 		try {
 			// sysex not needed — plain CC only.
 			this.#access = await navigator.requestMIDIAccess({ sysex: false });
-			this.#access.onstatechange = () => this.#refreshOutputs();
+			this.#access.onstatechange = () => {
+				this.#refreshOutputs();
+				this.#refreshInputs();
+			};
 			this.#refreshOutputs();
+			this.#refreshInputs();
 			this.status = 'ready';
 		} catch (err) {
 			// Permission denials surface here as SecurityError in most browsers.
@@ -111,8 +141,76 @@ class MidiService {
 		}
 	}
 
+	#refreshInputs() {
+		if (!this.#access) return;
+		const list: MidiPort[] = [];
+		for (const input of this.#access.inputs.values()) {
+			const name = input.name ?? '(unnamed)';
+			if (isHiddenPort(name)) continue; // skip ALSA "Midi Through" and similar virtual ports
+			list.push({
+				id: input.id,
+				name,
+				manufacturer: input.manufacturer ?? ''
+			});
+		}
+		this.inputs = list;
+
+		// If the selected input vanished (unplugged), drop the binding. We never
+		// auto-select an input: notes should only start flowing when the user picks one.
+		if (this.selectedInputId && !this.inputs.some((p) => p.id === this.selectedInputId)) {
+			this.selectInput(null);
+		} else {
+			// Re-bind in case the underlying MIDIInput object was replaced on re-plug.
+			this.#bindSelectedInput();
+		}
+	}
+
 	selectPort(id: string) {
 		this.selectedPortId = id;
+	}
+
+	/** Choose which input port to listen to (null = none). Rebinds the handler. */
+	selectInput(id: string | null) {
+		this.selectedInputId = id;
+		this.#bindSelectedInput();
+	}
+
+	/** Attach our onmidimessage listener to the selected input, detaching any old one. */
+	#bindSelectedInput() {
+		if (this.#boundInput) {
+			this.#boundInput.onmidimessage = null;
+			this.#boundInput = null;
+		}
+		if (!this.#access || !this.selectedInputId) return;
+		const input = this.#access.inputs.get(this.selectedInputId);
+		if (!input) return;
+		input.onmidimessage = (ev) => this.#handleMidiMessage(ev);
+		this.#boundInput = input;
+	}
+
+	#handleMidiMessage(ev: MIDIMessageEvent) {
+		const data = ev.data;
+		if (!data || data.length < 2) return;
+		const kind = data[0] & 0xf0; // strip channel — we force onto the synth channel on output
+		const note = data[1];
+		const velocity = data.length > 2 ? data[2] : 0;
+		if (kind === NOTE_ON_STATUS && velocity > 0) {
+			this.#emitNote({ type: 'on', note, velocity });
+		} else if (kind === NOTE_OFF_STATUS || (kind === NOTE_ON_STATUS && velocity === 0)) {
+			// Note On with velocity 0 is the running-status form of Note Off.
+			this.#emitNote({ type: 'off', note, velocity: 0 });
+		}
+		// Everything else (CC, clock, pitch bend, aftertouch, sysex…) is ignored for now.
+	}
+
+	#emitNote(ev: NoteInput) {
+		for (const h of this.#noteHandlers) h(ev);
+	}
+
+	/** Subscribe to incoming note events from the selected input; returns unsubscribe. */
+	onInputNote(handler: NoteInputHandler): () => void {
+		this.#noteHandlers.add(handler);
+		return () => this.#noteHandlers.delete(handler);
 	}
 
 	setChannel(channel: number) {

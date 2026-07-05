@@ -87,6 +87,22 @@
 					{/each}
 				</select>
 			</label>
+
+			<label>
+				<span>Input port <small>(keyboard → synth)</small></span>
+				<select
+					value={midi.selectedInputId ?? ''}
+					onchange={(e) => {
+						const v = (e.currentTarget as HTMLSelectElement).value;
+						midi.selectInput(v === '' ? null : v);
+					}}
+				>
+					<option value="">None</option>
+					{#each midi.inputs as port (port.id)}
+						<option value={port.id}>{port.name}</option>
+					{/each}
+				</select>
+			</label>
 		</div>
 
 		{#if midi.outputs.length === 0}
@@ -172,6 +188,12 @@
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-faint);
+	}
+	label span small {
+		text-transform: none;
+		letter-spacing: 0;
+		font-size: 0.9em;
+		opacity: 0.8;
 	}
 	select {
 		background: var(--bg-input);
