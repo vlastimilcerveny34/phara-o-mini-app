@@ -1,0 +1,68 @@
+:root {
+	--bg: #14161c;
+	--bg-panel: #1c1f28;
+	--bg-panel-2: #232734;
+	--bg-input: #10121a;
+	--border: #313747;
+	--border-strong: #454d63;
+	--text: #eef1f7;
+	--text-dim: #98a0b3;
+	--text-faint: #6b7284;
+	--accent: #ffb020;
+	--accent-2: #4db6ff;
+	--accent-dim: #7a5410;
+	--danger: #ff5c5c;
+	--ok: #46d17f;
+	--radius: 10px;
+	--mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code',
+		Menlo, Consolas, monospace;
+	--sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--sans);
+	-webkit-font-smoothing: antialiased;
+	line-height: 1.4;
+}
+
+h1,
+h2,
+h3 {
+	margin: 0;
+	font-weight: 650;
+	letter-spacing: 0.01em;
+}
+
+button {
+	font-family: inherit;
+	cursor: pointer;
+}
+
+button:disabled {
+	cursor: not-allowed;
+}
+
+input,
+select,
+button {
+	font-family: inherit;
+	color: inherit;
+}
+
+a {
+	color: var(--accent-2);
+}
