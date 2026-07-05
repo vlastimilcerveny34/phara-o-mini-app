@@ -63,6 +63,8 @@ export type UnavailableParam = {
 	label: string;
 	/** Why it can't be controlled, shown to the user. */
 	note: string;
+	/** Small corner badge; defaults to "hardware only" when omitted. */
+	badge?: string;
 	group: ParamGroup;
 };
 
@@ -100,9 +102,12 @@ const cont = (
  * All continuous CC parameters (14 total), in chart order.
  */
 export const CONTINUOUS_PARAMS: ContinuousParam[] = [
-	cont('modulation', 'Modulation', 'Modulation', 1, 'GLOBAL'),
-	cont('portamento', 'Portamento', 'Portamento', 5, 'GLOBAL'),
+	// CC 1 Modulation (mod-wheel) temporarily removed from the UI until we decide
+	// exactly how it should behave — re-enable here to bring it back everywhere.
+	// cont('modulation', 'Modulation', 'Modulation', 1, 'GLOBAL'),
 	cont('detune', 'Detune', 'Detune', 42, 'VCO'),
+	// Portamento (glide) lives on the VCO on the hardware, not in the global block.
+	cont('portamento', 'Portamento', 'Portamento', 5, 'VCO'),
 	cont('vco_env_mod', 'ENV MOD', 'VCO EG Modulation', 43, 'VCO'),
 	cont('vcf_cutoff', 'Cutoff', 'VCF Cutoff', 44, 'VCF'),
 	cont('vcf_env_mod', 'ENV MOD', 'VCF EG Modulation', 45, 'VCF'),
@@ -146,7 +151,8 @@ export const STEPPED_PARAMS: SteppedParam[] = [
 		label: 'Scale',
 		chartName: 'Scale',
 		cc: 41,
-		group: 'VCO',
+		// Octave/footage switch (32'…1') — a global voicing setting.
+		group: 'GLOBAL',
 		options: [
 			{ label: "32'", lo: 0, hi: 21, send: 10 },
 			{ label: "16'", lo: 22, hi: 43, send: 32 },
@@ -167,23 +173,18 @@ export const UNAVAILABLE_PARAMS: UnavailableParam[] = [
 		kind: 'unavailable',
 		id: 'resonance',
 		label: 'Resonance',
-		note: 'No CC in the official chart. Manufacturer mentions NRPN but numbers are unknown — control on the hardware.',
+		note: 'Absent from the manual’s MIDI CC chart, which lists no NRPN either — there is no MIDI path for it. Control it on the hardware.',
 		group: 'VCF'
 	},
 	{
 		kind: 'unavailable',
 		id: 'dry_wet',
 		label: 'Dry/Wet',
-		note: 'No CC in the official chart. Manufacturer mentions NRPN but numbers are unknown — control on the hardware.',
+		note: 'Absent from the manual’s MIDI CC chart, which lists no NRPN either — there is no MIDI path for it. Control it on the hardware.',
 		group: 'DELAY'
-	},
-	{
-		kind: 'unavailable',
-		id: 'tempo',
-		label: 'Tempo',
-		note: 'Not a CC — driven over MIDI clock. Clock generation is planned for a later phase.',
-		group: 'GLOBAL'
 	}
+	// Tempo used to live here as "unavailable". As of phase 2 it's a real feature
+	// (MIDI clock master) rendered by TransportControl in the Global row.
 ];
 
 /** Every parameter, useful for iteration / lookups. */
@@ -204,5 +205,32 @@ export const CONTROLLABLE_IDS: string[] = [
 	...STEPPED_PARAMS.map((p) => p.id)
 ];
 
-/** Group ordering used for panel layout. */
-export const GROUP_ORDER: ParamGroup[] = ['VCO', 'VCF', 'EG', 'LFO', 'DELAY', 'GLOBAL'];
+/** Group ordering used for panel layout. Global sits at the top. */
+export const GROUP_ORDER: ParamGroup[] = ['GLOBAL', 'VCO', 'VCF', 'LFO', 'EG', 'DELAY'];
+
+/**
+ * Explicit panel layout — the exact left-to-right order of controls within each
+ * section, matching how the parameters are laid out on the hardware. Referencing
+ * params by id (rather than relying on array/type concatenation order) lets an
+ * "unavailable" control like Resonance sit first in its row.
+ *
+ * The MIDI setup card is injected into the GLOBAL row by the page, so it isn't
+ * listed here.
+ */
+export type PanelGroup = { group: ParamGroup; label: string; paramIds: string[] };
+
+export const PANEL_GROUPS: PanelGroup[] = [
+	// Tempo is rendered as the live TransportControl card (injected by the page),
+	// so it isn't a param id here.
+	{ group: 'GLOBAL', label: GROUP_LABELS.GLOBAL, paramIds: ['scale', 'voice_mode'] },
+	{ group: 'VCO', label: GROUP_LABELS.VCO, paramIds: ['portamento', 'detune', 'vco_env_mod'] },
+	{ group: 'VCF', label: GROUP_LABELS.VCF, paramIds: ['resonance', 'vcf_cutoff', 'vcf_env_mod'] },
+	{ group: 'LFO', label: GROUP_LABELS.LFO, paramIds: ['lfo_vco_mod', 'lfo_rate', 'lfo_vcf_mod'] },
+	{ group: 'EG', label: GROUP_LABELS.EG, paramIds: ['eg_attack', 'eg_decay_release', 'eg_sustain'] },
+	{ group: 'DELAY', label: GROUP_LABELS.DELAY, paramIds: ['delay_feedback', 'delay_time', 'dry_wet'] }
+];
+
+/** Resolve a panel group's ids to actual Param objects, preserving order. */
+export function panelParams(g: PanelGroup): Param[] {
+	return g.paramIds.map((id) => PARAM_BY_ID[id]).filter((p): p is Param => Boolean(p));
+}

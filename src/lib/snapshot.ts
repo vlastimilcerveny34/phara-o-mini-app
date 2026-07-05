@@ -55,7 +55,7 @@ export function downloadSnapshot(snapshot: Snapshot) {
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement('a');
 	a.href = url;
-	a.download = `${safeFileName(snapshot.name)}.phara-o.json`;
+	a.download = `${safeFileName(snapshot.name)}.snp`;
 	document.body.appendChild(a);
 	a.click();
 	a.remove();
@@ -74,8 +74,14 @@ export function parseSnapshot(text: string): Snapshot {
 		throw new Error('Snapshot must be a JSON object.');
 	}
 	const obj = data as Record<string, unknown>;
+	// Friendlier guard: catch a sequencer pattern loaded into the patch slot.
+	// (Literal mirrors PATTERN_FORMAT in sequencer.svelte.ts — kept inline to
+	// avoid a circular import between the two modules.)
+	if (obj.format === 'phara-o-mini-pattern') {
+		throw new Error('This is a sequencer pattern (.seq), not a patch — load it in the Sequencer.');
+	}
 	if (obj.format !== SNAPSHOT_FORMAT) {
-		throw new Error('This does not look like a Phara-O Mini snapshot.');
+		throw new Error('This does not look like a Phara-O Mini patch.');
 	}
 	const continuous = coerceNumberMap(obj.continuous);
 	const stepped = coerceNumberMap(obj.stepped);

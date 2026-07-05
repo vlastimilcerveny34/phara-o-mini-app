@@ -6,7 +6,7 @@
 <div class="ctrl" aria-disabled="true">
 	<div class="top">
 		<span class="label">{param.label}</span>
-		<span class="badge">hardware only</span>
+		<span class="badge">{param.badge ?? 'hardware only'}</span>
 	</div>
 	<p class="note">{param.note}</p>
 </div>

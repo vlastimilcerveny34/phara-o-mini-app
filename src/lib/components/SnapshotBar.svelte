@@ -7,6 +7,7 @@
 		applySnapshot,
 		type Snapshot
 	} from '$lib/snapshot';
+	import { FACTORY_PATCHES, factoryToSnapshot, type FactoryPatch } from '$lib/factoryPatches';
 
 	let snapshotName = $state('');
 	let fileInput: HTMLInputElement;
@@ -63,6 +64,18 @@
 		busy = false;
 		flash('ok', `Loaded “${snap.name}” — sent ${sent} messages to the synth.`);
 	}
+
+	async function onFactory(p: FactoryPatch) {
+		snapshotName = p.name;
+		busy = true;
+		const sent = await applySnapshot(factoryToSnapshot(p));
+		busy = false;
+		if (midi.isReady) {
+			flash('ok', `Loaded “${p.name}” — sent ${sent} messages to the synth.`);
+		} else {
+			flash('bad', `Loaded “${p.name}” into UI, but no MIDI port — nothing sent.`);
+		}
+	}
 </script>
 
 <section class="bar">
@@ -89,10 +102,24 @@
 		<input
 			bind:this={fileInput}
 			type="file"
-			accept=".json,application/json"
+			accept=".snp,application/json"
 			onchange={onFileChosen}
 			hidden
 		/>
+	</div>
+
+	<div class="factory">
+		<div class="factory-head">
+			<h3>Factory patches</h3>
+			<span class="note">Resonance &amp; Dry/Wet aren’t MIDI-controllable — set those on the synth.</span>
+		</div>
+		<div class="chips">
+			{#each FACTORY_PATCHES as p (p.name)}
+				<button class="chip" onclick={() => onFactory(p)} disabled={busy} title={p.description}>
+					{p.name}
+				</button>
+			{/each}
+		</div>
 	</div>
 
 	{#if feedback}
@@ -162,6 +189,49 @@
 		filter: brightness(1.06);
 	}
 	.btn:disabled {
+		opacity: 0.55;
+	}
+	.factory {
+		margin-top: 1rem;
+		padding-top: 0.9rem;
+		border-top: 1px solid var(--border);
+	}
+	.factory-head {
+		display: flex;
+		align-items: baseline;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.6rem;
+	}
+	.factory-head h3 {
+		font-size: 0.78rem;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		color: var(--text-dim);
+	}
+	.factory-head .note {
+		font-size: 0.72rem;
+		color: var(--text-faint);
+	}
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+	}
+	.chip {
+		background: var(--bg-input);
+		border: 1px solid var(--border-strong);
+		border-radius: 999px;
+		padding: 0.4rem 0.85rem;
+		font-size: 0.83rem;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.chip:hover:not(:disabled) {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	.chip:disabled {
 		opacity: 0.55;
 	}
 	.feedback {

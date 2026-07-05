@@ -105,29 +105,32 @@
 
 <style>
 	.setup {
-		background: var(--bg-panel);
+		background: var(--bg-panel-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		padding: 1rem 1.1rem 1.15rem;
+		padding: 0.7rem 0.8rem 0.75rem;
+		height: 100%;
 	}
 	header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 1rem;
-		margin-bottom: 0.85rem;
+		gap: 0.5rem;
+		row-gap: 0.3rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.7rem;
 	}
 	h2 {
-		font-size: 1rem;
+		font-size: 0.82rem;
 		text-transform: uppercase;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.06em;
 		color: var(--text-dim);
 	}
 	.status {
 		display: flex;
 		align-items: center;
-		gap: 0.45rem;
-		font-size: 0.82rem;
+		gap: 0.4rem;
+		font-size: 0.72rem;
 		color: var(--text-dim);
 		white-space: nowrap;
 	}
@@ -153,17 +156,16 @@
 	}
 	.fields {
 		display: flex;
-		gap: 0.75rem;
-		flex-wrap: wrap;
+		flex-direction: column;
+		gap: 0.6rem;
 	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;
-		flex: 1 1 12rem;
 	}
 	label.channel {
-		flex: 0 0 6rem;
+		max-width: 7rem;
 	}
 	label span {
 		font-size: 0.72rem;

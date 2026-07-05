@@ -26,7 +26,21 @@ export type MidiPort = {
 /** Substring we look for to auto-select the Phara-O's port (case-insensitive). */
 export const PHARAO_PORT_HINT = 'PHARA-O';
 
+/**
+ * Virtual/loopback ports we never want to offer as the synth output. On Linux,
+ * ALSA always exposes a "Midi Through" port (Midi Through Port-0) that is not a
+ * device — surfacing it just confuses the port picker.
+ */
+const HIDDEN_PORT_PATTERNS = [/midi\s*through/i];
+
+function isHiddenPort(name: string): boolean {
+	return HIDDEN_PORT_PATTERNS.some((re) => re.test(name));
+}
+
 const CC_STATUS = 0xb0; // Control Change, channel added in low nibble
+const NOTE_ON_STATUS = 0x90; // Note On, channel added in low nibble
+const NOTE_OFF_STATUS = 0x80; // Note Off, channel added in low nibble
+const CC_ALL_NOTES_OFF = 123;
 
 class MidiService {
 	status = $state<MidiStatus>('idle');
@@ -76,9 +90,11 @@ class MidiService {
 		if (!this.#access) return;
 		const list: MidiPort[] = [];
 		for (const output of this.#access.outputs.values()) {
+			const name = output.name ?? '(unnamed)';
+			if (isHiddenPort(name)) continue; // skip ALSA "Midi Through" and similar virtual ports
 			list.push({
 				id: output.id,
-				name: output.name ?? '(unnamed)',
+				name,
 				manufacturer: output.manufacturer ?? ''
 			});
 		}
@@ -118,6 +134,61 @@ class MidiService {
 		const status = CC_STATUS | ((this.channel - 1) & 0x0f);
 		out.send([status, clamp7(cc), clamp7(value)]);
 		return true;
+	}
+
+	/**
+	 * Send raw MIDI bytes, optionally scheduled at a `performance.now()`-domain
+	 * timestamp (Web MIDI shares that time origin). Used by the transport to
+	 * schedule clock ticks ahead of time for jitter-free timing. A timestamp in
+	 * the past (or omitted) sends immediately.
+	 */
+	sendRaw(data: number[], timestamp?: number): boolean {
+		const out = this.#rawOutput();
+		if (!out) return false;
+		out.send(data, timestamp);
+		return true;
+	}
+
+	/**
+	 * Send a Note On, optionally scheduled at a `performance.now()`-domain
+	 * timestamp. `note` and `velocity` are clamped to 0-127. Used by the in-app
+	 * sequencer; the synth only needs MIDI Rx = ON to react (independent of its
+	 * clock source).
+	 */
+	sendNoteOn(note: number, velocity: number, timestamp?: number): boolean {
+		const out = this.#rawOutput();
+		if (!out) return false;
+		const status = NOTE_ON_STATUS | ((this.channel - 1) & 0x0f);
+		out.send([status, clamp7(note), clamp7(velocity)], timestamp);
+		return true;
+	}
+
+	/** Send a Note Off, optionally scheduled at a `performance.now()` timestamp. */
+	sendNoteOff(note: number, timestamp?: number): boolean {
+		const out = this.#rawOutput();
+		if (!out) return false;
+		const status = NOTE_OFF_STATUS | ((this.channel - 1) & 0x0f);
+		out.send([status, clamp7(note), 0], timestamp);
+		return true;
+	}
+
+	/** Panic: send All Notes Off on the current channel so nothing hangs. */
+	allNotesOff(): boolean {
+		const out = this.#rawOutput();
+		if (!out) return false;
+		const status = CC_STATUS | ((this.channel - 1) & 0x0f);
+		out.send([status, CC_ALL_NOTES_OFF, 0]);
+		return true;
+	}
+
+	/**
+	 * Cancel any messages scheduled with a future timestamp but not yet sent.
+	 * Used when stopping the sequencer so look-ahead notes don't play after stop.
+	 */
+	clearScheduled(): void {
+		// MIDIOutput.clear() is in the Web MIDI spec but missing from some type defs.
+		const out = this.#rawOutput() as (MIDIOutput & { clear?: () => void }) | null;
+		out?.clear?.();
 	}
 
 	/**

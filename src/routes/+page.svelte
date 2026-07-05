@@ -1,34 +1,40 @@
 <script lang="ts">
-	import {
-		ALL_PARAMS,
-		GROUP_LABELS,
-		GROUP_ORDER,
-		type Param,
-		type ParamGroup
-	} from '$lib/params';
+	import { PANEL_GROUPS, panelParams, type Param } from '$lib/params';
 	import { midi } from '$lib/midi.svelte';
 	import MidiSetup from '$lib/components/MidiSetup.svelte';
-	import HardwareNote from '$lib/components/HardwareNote.svelte';
+	import TransportControl from '$lib/components/TransportControl.svelte';
+	import SequencerControl from '$lib/components/SequencerControl.svelte';
 	import SnapshotBar from '$lib/components/SnapshotBar.svelte';
 	import ContinuousControl from '$lib/components/ContinuousControl.svelte';
 	import SteppedControl from '$lib/components/SteppedControl.svelte';
 	import UnavailableControl from '$lib/components/UnavailableControl.svelte';
 
-	// Group params for the panel layout; the panel is just a map over PARAMS.
-	function paramsIn(group: ParamGroup): Param[] {
-		return ALL_PARAMS.filter((p) => p.group === group);
-	}
+	// The panel is just a map over the config's explicit layout.
+	const panel = PANEL_GROUPS.map((g) => ({
+		id: g.group,
+		label: g.label,
+		params: panelParams(g)
+	}));
 
-	const groups = GROUP_ORDER.map((g) => ({
-		id: g,
-		label: GROUP_LABELS[g],
-		params: paramsIn(g)
-	})).filter((g) => g.params.length > 0);
+	// Global sits at the top; the MIDI setup card rides in the same row as its
+	// last cell. Everything else stacks below.
+	const globalGroup = panel.find((g) => g.id === 'GLOBAL');
+	const otherGroups = panel.filter((g) => g.id !== 'GLOBAL');
 </script>
 
 <svelte:head>
 	<title>Phara-O Mini Editor</title>
 </svelte:head>
+
+{#snippet control(param: Param)}
+	{#if param.kind === 'continuous'}
+		<ContinuousControl {param} />
+	{:else if param.kind === 'stepped'}
+		<SteppedControl {param} />
+	{:else}
+		<UnavailableControl {param} />
+	{/if}
+{/snippet}
 
 <div class="page">
 	<header class="masthead">
@@ -46,29 +52,34 @@
 		{/if}
 	</header>
 
-	<div class="controls-head">
-		<MidiSetup />
-		<HardwareNote />
-	</div>
+	{#if globalGroup}
+		<section class="group">
+			<h2 class="group-title">{globalGroup.label}</h2>
+			<div class="grid">
+				{#each globalGroup.params as param (param.id)}
+					{@render control(param)}
+				{/each}
+				<!-- Live tempo (MIDI clock) + MIDI setup as equal-sized cards in the Global row. -->
+				<TransportControl />
+				<MidiSetup />
+			</div>
+		</section>
+	{/if}
 
 	<main>
-		{#each groups as group (group.id)}
+		{#each otherGroups as group (group.id)}
 			<section class="group">
 				<h2 class="group-title">{group.label}</h2>
 				<div class="grid">
 					{#each group.params as param (param.id)}
-						{#if param.kind === 'continuous'}
-							<ContinuousControl {param} />
-						{:else if param.kind === 'stepped'}
-							<SteppedControl {param} />
-						{:else}
-							<UnavailableControl {param} />
-						{/if}
+						{@render control(param)}
 					{/each}
 				</div>
 			</section>
 		{/each}
 	</main>
+
+	<SequencerControl />
 
 	<SnapshotBar />
 
@@ -128,11 +139,6 @@
 		color: var(--ok);
 		border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
 	}
-	.controls-head {
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
-	}
 	main {
 		display: flex;
 		flex-direction: column;
@@ -149,8 +155,9 @@
 	}
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 		gap: 0.75rem;
+		align-items: stretch;
 	}
 	footer {
 		margin-top: 0.5rem;
