@@ -9,8 +9,8 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .DS_Store
 
-# Local Claude Code config (machine-specific)
-.claude/settings.local.json
+# Local Claude Code config (machine-specific), incl. its *.tmp.* write artifacts
+.claude/settings.local.json*
 
 # Manufacturer manual (Behringer copyright) — kept locally, not redistributed
 docs/*.pdf
