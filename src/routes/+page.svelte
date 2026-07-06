@@ -9,6 +9,7 @@
 	import ArpControl from '$lib/components/ArpControl.svelte';
 	import SequencerControl from '$lib/components/SequencerControl.svelte';
 	import SnapshotBar from '$lib/components/SnapshotBar.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import ContinuousControl from '$lib/components/ContinuousControl.svelte';
 	import SteppedControl from '$lib/components/SteppedControl.svelte';
 	import UnavailableControl from '$lib/components/UnavailableControl.svelte';
@@ -112,14 +113,9 @@
 		<ArpControl />
 
 		<NoteSourceControl />
-
-		<footer>
-			<p>
-				Phara-O Mini editor · one-way MIDI CC control · no data is read from the hardware. Built
-				on standard Web MIDI, so it runs anywhere a browser supports it.
-			</p>
-		</footer>
 	{/if}
+
+	<Footer />
 </div>
 
 <style>
@@ -217,15 +213,5 @@
 		grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 		gap: 0.75rem;
 		align-items: stretch;
-	}
-	footer {
-		margin-top: 0.5rem;
-		border-top: 1px solid var(--border);
-		padding-top: 1rem;
-	}
-	footer p {
-		margin: 0;
-		font-size: 0.75rem;
-		color: var(--text-faint);
 	}
 </style>

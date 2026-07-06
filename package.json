@@ -32,6 +32,7 @@
     "@sveltejs/adapter-vercel": "^6.3.4",
     "@sveltejs/kit": "^2.8.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@types/node": "^26.1.0",
     "@types/webmidi": "^2.0.10",
     "svelte": "^5.1.0",
     "svelte-check": "^4.0.0",
