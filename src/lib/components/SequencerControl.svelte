@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { transport } from '$lib/transport.svelte';
 	import { midi } from '$lib/midi.svelte';
+	import { noteGenerator } from '$lib/noteGenerator.svelte';
 	import {
 		sequencer,
 		noteName,
@@ -18,6 +18,7 @@
 	let feedback = $state<Feedback>(null);
 
 	let ready = $derived(midi.isReady);
+	let active = $derived(noteGenerator.active === 'sequencer');
 	let step = $derived(sequencer.steps[sequencer.cursor]);
 
 	function flash(kind: 'ok' | 'bad', text: string) {
@@ -85,10 +86,16 @@
 	<header>
 		<div class="title">
 			<h2>Step Sequencer</h2>
-			<label class="enable">
-				<input type="checkbox" bind:checked={sequencer.enabled} />
-				<span>Send notes</span>
-			</label>
+			<!-- Starting the sequencer turns off the arp (one note generator at a time). -->
+			<button
+				class="play"
+				class:on={active}
+				onclick={() => noteGenerator.select('sequencer')}
+				disabled={!ready}
+				title={ready ? '' : 'Connect MIDI first'}
+			>
+				{active ? '■ Stop' : '▶ Play'}
+			</button>
 		</div>
 
 		<div class="transport">
@@ -116,16 +123,6 @@
 					>
 				</div>
 			</div>
-			<button
-				class="play"
-				class:on={transport.isPlaying}
-				onclick={() => transport.toggle()}
-				disabled={!ready}
-				title={ready ? '' : 'Connect MIDI first'}
-			>
-				{transport.isPlaying ? '■ Stop' : '▶ Play'}
-			</button>
-			<span class="bpm">{transport.bpm}<small>BPM</small></span>
 		</div>
 	</header>
 
@@ -140,7 +137,7 @@
 					<button class="mini" onclick={() => sequencer.cursorLeft()} aria-label="Cursor left">←</button>
 					<button class="mini" onclick={() => sequencer.cursorRight()} aria-label="Cursor right">→</button>
 				</div>
-			{:else if !transport.isPlaying}
+			{:else if !active}
 				<span class="rec-msg">Press <strong>▶ Play</strong> to record live — notes snap to the nearest step.</span>
 			{:else}
 				<span class="rec-msg">Recording live — play along; notes snap to the nearest step, hold length sets gate.</span>
@@ -274,12 +271,25 @@
 		letter-spacing: 0.08em;
 		color: var(--text-dim);
 	}
-	.enable {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		font-size: 0.8rem;
-		color: var(--text-dim);
+	.play {
+		background: var(--accent);
+		color: #1a1206;
+		border: none;
+		border-radius: 8px;
+		padding: 0.5rem 1.1rem;
+		font-weight: 650;
+		font-size: 0.9rem;
+	}
+	.play.on {
+		background: var(--ok);
+		color: #08210f;
+	}
+	.play:hover:not(:disabled) {
+		filter: brightness(1.06);
+	}
+	.play:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 	.transport {
 		display: flex;
@@ -379,38 +389,6 @@
 	.rec-actions {
 		display: flex;
 		gap: 0.4rem;
-	}
-	.play {
-		background: var(--accent);
-		color: #1a1206;
-		border: none;
-		border-radius: 8px;
-		padding: 0.5rem 1.1rem;
-		font-weight: 650;
-		font-size: 0.9rem;
-	}
-	.play.on {
-		background: var(--ok);
-		color: #08210f;
-	}
-	.play:hover:not(:disabled) {
-		filter: brightness(1.06);
-	}
-	.play:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.bpm {
-		font-family: var(--mono);
-		font-size: 1.1rem;
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
-		color: var(--text-dim);
-	}
-	.bpm small {
-		font-size: 0.55rem;
-		color: var(--text-faint);
-		margin-left: 0.15rem;
 	}
 	.settings {
 		display: flex;

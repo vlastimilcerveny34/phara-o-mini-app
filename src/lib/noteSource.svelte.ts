@@ -8,9 +8,11 @@
  *
  * Behaviour:
  *  - Every source (on-screen keyboard and external MIDI input) plays straight to
- *    the synth — there is no monitor gate. (A DAW-style "monitor off" switch only
- *    makes sense once recording/arp exists, to avoid doubling notes; it will come
- *    back then.)
+ *    the synth — EXCEPT while a capture gate is closed: when the arpeggiator is
+ *    running it owns the held notes (it re-plays them itself), so direct
+ *    note-ons are suppressed to avoid every key sounding twice. Note-offs are
+ *    always sent — a Note Off for a note that isn't sounding is harmless, and
+ *    always sending avoids hung notes when the gate flips mid-hold.
  *  - All output goes out on the app's selected synth channel (force-to-synth),
  *    because midi.sendNoteOn/Off always use midi.channel. So an external keyboard
  *    on any channel still reaches the synth.
@@ -41,6 +43,9 @@ class NoteSources {
 
 	#unbindInput: (() => void) | null = null;
 	#consumers = new Set<NotePlayConsumer>();
+	/** When set and returning true, note-ons are captured by a consumer (the
+	 * arpeggiator) instead of playing straight to the synth. */
+	#captureGate: (() => boolean) | null = null;
 
 	constructor() {
 		// Bridge the MIDI service's raw note events into this layer.
@@ -56,11 +61,16 @@ class NoteSources {
 		return () => this.#consumers.delete(consumer);
 	}
 
+	/** Install the capture gate (see the class comment). One consumer at a time. */
+	setCaptureGate(gate: (() => boolean) | null) {
+		this.#captureGate = gate;
+	}
+
 	noteOn(note: number, velocity: number, _source: NoteSourceKind) {
 		const next = new Map(this.held);
 		next.set(note, velocity);
 		this.held = next;
-		midi.sendNoteOn(note, velocity);
+		if (!this.#captureGate?.()) midi.sendNoteOn(note, velocity);
 		for (const c of this.#consumers) c.onNoteOn?.(note, velocity);
 	}
 

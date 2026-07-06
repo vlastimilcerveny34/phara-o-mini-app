@@ -2,8 +2,9 @@
 	import { PANEL_GROUPS, panelParams, type Param } from '$lib/params';
 	import { midi } from '$lib/midi.svelte';
 	import MidiSetup from '$lib/components/MidiSetup.svelte';
-	import TransportControl from '$lib/components/TransportControl.svelte';
+	import TempoControl from '$lib/components/TempoControl.svelte';
 	import NoteSourceControl from '$lib/components/NoteSourceControl.svelte';
+	import ArpControl from '$lib/components/ArpControl.svelte';
 	import SequencerControl from '$lib/components/SequencerControl.svelte';
 	import SnapshotBar from '$lib/components/SnapshotBar.svelte';
 	import ContinuousControl from '$lib/components/ContinuousControl.svelte';
@@ -60,12 +61,18 @@
 				{#each globalGroup.params as param (param.id)}
 					{@render control(param)}
 				{/each}
-				<!-- Live tempo (MIDI clock) + MIDI setup as equal-sized cards in the Global row. -->
-				<TransportControl />
+				<!-- Tempo (the app-wide clock rate) + MIDI setup ride as equal-sized cards
+				     in the Global row, after Scale and Voice Mode. -->
+				<TempoControl />
 				<MidiSetup />
 			</div>
 		</section>
 	{/if}
+
+	<!-- Patch management sits right under Global — pick a patch (or Init) first,
+	     then tweak the parameters below. The keyboard closes the page, like on a
+	     real instrument: control panel on top, keys at the bottom. -->
+	<SnapshotBar />
 
 	<main>
 		{#each otherGroups as group (group.id)}
@@ -82,9 +89,9 @@
 
 	<SequencerControl />
 
-	<NoteSourceControl />
+	<ArpControl />
 
-	<SnapshotBar />
+	<NoteSourceControl />
 
 	<footer>
 		<p>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { noteSources } from '$lib/noteSource.svelte';
+	import { arp } from '$lib/arp.svelte';
 	import { midi } from '$lib/midi.svelte';
 	import Keyboard from './Keyboard.svelte';
 
@@ -17,7 +18,10 @@
 			{/if}
 			<button
 				class="panic"
-				onclick={() => noteSources.panic()}
+				onclick={() => {
+					arp.clear(); // also drop latched arp notes, or they'd keep playing
+					noteSources.panic();
+				}}
 				disabled={!ready}
 				title="Send All Notes Off">Panic</button
 			>

@@ -12,6 +12,7 @@
 import { transport, type TickConsumer } from './transport.svelte';
 import { midi } from './midi.svelte';
 import { noteSources } from './noteSource.svelte';
+import { noteGenerator } from './noteGenerator.svelte';
 
 export const MAX_STEPS = 16;
 export const MIN_NOTE = 24; // C1
@@ -76,10 +77,13 @@ class Sequencer implements TickConsumer {
 	steps = $state<Step[]>(defaultSteps());
 	length = $state(MAX_STEPS);
 	ticksPerStep = $state(6); // 1/16 notes
-	/** When false, the transport still runs (clock) but no notes are sent. */
-	enabled = $state(true);
 	/** Currently lit step for the playhead; -1 when stopped. */
 	currentStep = $state(-1);
+
+	/** True when the sequencer is the selected note generator (see noteGenerator.svelte.ts). */
+	get enabled(): boolean {
+		return noteGenerator.active === 'sequencer';
+	}
 
 	// --- recording -----------------------------------------------------------
 	/** The one highlighted step: what the detail editor edits AND where step
@@ -147,6 +151,9 @@ class Sequencer implements TickConsumer {
 	}
 
 	onTick(tick: number, time: number) {
+		// The clock also runs when the arp is the active generator — the sequencer
+		// must sit completely still then (no playhead, no marks, no notes).
+		if (!this.enabled) return;
 		if (tick % this.ticksPerStep !== 0) return; // only act on step boundaries
 		const index = Math.floor(tick / this.ticksPerStep) % this.length;
 		this.currentStep = index;
@@ -154,7 +161,7 @@ class Sequencer implements TickConsumer {
 		// the nearest step in real time (the scheduler runs ahead of the audio).
 		this.#stepMarks.push({ index, time });
 		if (this.#stepMarks.length > 8) this.#stepMarks.shift();
-		if (this.enabled) this.#playStep(index, time);
+		this.#playStep(index, time);
 	}
 
 	onStop() {
@@ -207,7 +214,8 @@ class Sequencer implements TickConsumer {
 			this.#writeStep(this.cursor, note, velocity);
 			this.cursorRight();
 		} else {
-			if (!transport.isPlaying) return; // live needs the clock running
+			// Live needs the pattern actually running (not the arp borrowing the clock).
+			if (!this.enabled || !transport.isPlaying) return;
 			const now = performance.now();
 			const index = this.#nearestStep(now);
 			this.#writeStep(index, note, velocity);

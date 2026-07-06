@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "WebFetch(domain:www.manua.ls)",
+      "Bash(pdftotext -layout \"QSG_BE_0722-AAU_PHARA-O MINI_WW.pdf\" /tmp/claude-1000/-home-vlasta-projects-phara-o/582d01ca-29c0-4da1-b04a-92fb7fd7e56c/scratchpad/manual.txt)",
+      "Bash(gh auth *)",
+      "Bash(grep -vE '^\\\\.$|^\\\\.\\\\.$')",
+      "Bash(git check-ignore *)",
+      "Bash(git -C /home/vlasta/projects/phara-o log --oneline -5)",
+      "Bash(git -C /home/vlasta/projects/phara-o status --short)",
+      "Bash(kill 24245 24257 24258)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}

@@ -5,6 +5,10 @@
  * MIDI via FUNC + key 7 at power-on) slaves its tempo to the computer:
  *   Start (0xFA) → Clock (0xF8) × 24 PPQN → Stop (0xFC)
  *
+ * Not user-facing: start/stop is driven by selecting a note generator
+ * (`noteGenerator.svelte.ts`) — the clock runs for exactly as long as the
+ * sequencer or the arp is playing. The user only ever sets the tempo.
+ *
  * Timing uses a look-ahead scheduler ("A Tale of Two Clocks"): a coarse timer
  * wakes every INTERVAL_MS and schedules every tick due within the next
  * LOOKAHEAD_MS using Web MIDI's timestamped send, so clock jitter doesn't
@@ -72,11 +76,6 @@ class Transport {
 
 	nudge(delta: number) {
 		this.setBpm(this.bpm + delta);
-	}
-
-	toggle() {
-		if (this.isPlaying) this.stop();
-		else this.start();
 	}
 
 	start() {

@@ -1,8 +1,5 @@
 <script lang="ts">
 	import { transport, MIN_BPM, MAX_BPM } from '$lib/transport.svelte';
-	import { midi } from '$lib/midi.svelte';
-
-	let ready = $derived(midi.isReady);
 
 	function onBpmInput(e: Event) {
 		transport.setBpm(Number((e.currentTarget as HTMLInputElement).value));
@@ -39,26 +36,9 @@
 		>
 	</div>
 
-	<button
-		class="play"
-		class:on={transport.isPlaying}
-		onclick={() => transport.toggle()}
-		disabled={!ready}
-		title={ready ? '' : 'Connect MIDI first'}
-	>
-		{#if transport.isPlaying}
-			<span class="glyph">■</span> Stop clock
-		{:else}
-			<span class="glyph">▶</span> Start clock
-		{/if}
-	</button>
-
 	<p class="hint">
-		{#if !ready}
-			Connect MIDI to send clock.
-		{:else}
-			Sends MIDI clock. Synth needs Clock Source = USB MIDI (FUNC + key 7 at power-on).
-		{/if}
+		The sequencer and arp play at this tempo. MIDI clock is sent to the synth while they run
+		(synth: Clock Source = USB MIDI, FUNC + key 7 at power-on).
 	</p>
 </div>
 
@@ -151,33 +131,6 @@
 		border-radius: 50%;
 		background: var(--text);
 		border: 2px solid var(--accent);
-	}
-	.play {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.4rem;
-		background: var(--accent);
-		color: #1a1206;
-		border: none;
-		border-radius: 8px;
-		padding: 0.5rem;
-		font-weight: 650;
-		font-size: 0.9rem;
-	}
-	.play.on {
-		background: var(--ok);
-		color: #08210f;
-	}
-	.play:hover:not(:disabled) {
-		filter: brightness(1.06);
-	}
-	.play:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.glyph {
-		font-size: 0.75rem;
 	}
 	.hint {
 		margin: 0;

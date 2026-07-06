@@ -184,7 +184,7 @@ export const UNAVAILABLE_PARAMS: UnavailableParam[] = [
 		group: 'DELAY'
 	}
 	// Tempo used to live here as "unavailable". As of phase 2 it's a real feature
-	// (MIDI clock master) rendered by TransportControl in the Global row.
+	// (MIDI clock master) rendered by the TempoControl card in the Global row.
 ];
 
 /** Every parameter, useful for iteration / lookups. */
@@ -220,8 +220,8 @@ export const GROUP_ORDER: ParamGroup[] = ['GLOBAL', 'VCO', 'VCF', 'LFO', 'EG', '
 export type PanelGroup = { group: ParamGroup; label: string; paramIds: string[] };
 
 export const PANEL_GROUPS: PanelGroup[] = [
-	// Tempo is rendered as the live TransportControl card (injected by the page),
-	// so it isn't a param id here.
+	// Tempo is rendered as the live TempoControl card (injected by the page into
+	// the Global row), so it isn't a param id here.
 	{ group: 'GLOBAL', label: GROUP_LABELS.GLOBAL, paramIds: ['scale', 'voice_mode'] },
 	{ group: 'VCO', label: GROUP_LABELS.VCO, paramIds: ['portamento', 'detune', 'vco_env_mod'] },
 	{ group: 'VCF', label: GROUP_LABELS.VCF, paramIds: ['resonance', 'vcf_cutoff', 'vcf_env_mod'] },

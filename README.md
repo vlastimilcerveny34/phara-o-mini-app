@@ -6,10 +6,10 @@ whole point of this app is to **show you the numeric value** of every parameter
 as you change it — and, beyond editing, to **play, record and sequence** the
 synth from the computer.
 
-> **Status: beta (0.3.x).** Core editor, snapshot librarian, MIDI-clock
-> transport, a monophonic step sequencer, note sources (on-screen keyboard +
-> MIDI input) and step/live recording are working. More is planned — see
-> [Roadmap](#roadmap).
+> **Status: beta (0.4.x).** Core editor, snapshot librarian (with an Init
+> patch), a monophonic step sequencer with step/live recording, an
+> **arpeggiator**, and note sources (on-screen keyboard + MIDI input) are
+> working. More is planned — see [Roadmap](#roadmap).
 
 ## Design premise (read this)
 
@@ -21,7 +21,8 @@ sequencer). If a physical knob and the app value drift apart, that's expected �
 not a bug.
 
 MIDI **input** exists only as a *note source*: an external keyboard plays
-*through the app* to the synth (and can record into the sequencer). That is a
+*through the app* to the synth (and can record into the sequencer or drive the
+arpeggiator). That is a
 controller feeding the app — still not reading the synth's own state. A keyboard
 wired **directly** into the synth bypasses the app entirely (by design).
 
@@ -74,12 +75,19 @@ truth. The UI panel is just a map over it.
   they are absent from the CC chart and there is no NRPN for them either, so they
   must be set on the hardware. We do **not** guess MIDI numbers.
 
-## Transport (MIDI clock master)
+## Tempo & clock (no play button)
 
-A **look-ahead scheduler** emits MIDI Start/Stop + 24-PPQN clock so the synth (in
-USB-clock mode) can slave its tempo to the computer. Tempo 20–300 BPM. The same
-scheduler drives the step sequencer, so future arp/sequencer features attach to
-it as clock consumers rather than spinning their own timers.
+There is **one app-wide tempo** (20–300 BPM, a card in the Global row) and **no
+user-facing clock control** — just like the hardware, whose clock has no stop
+button either. The clock runs for exactly as long as a note generator (the
+sequencer or the arp) is playing; each of those has its own Play/On button in
+its panel. While something plays, a **look-ahead scheduler** emits MIDI
+Start/Stop + 24-PPQN clock so the synth (in USB-clock mode) can slave its tempo
+to the computer. The same scheduler times the sequencer's and the arp's notes,
+so their timing doesn't depend on JS timer precision.
+
+The sequencer and the arpeggiator are **mutually exclusive** (both write notes
+for one voice): turning one on stops the other.
 
 ## Note sources (keyboard + MIDI input)
 
@@ -101,27 +109,45 @@ A **monophonic** step sequencer that plays the synth by sending MIDI notes timed
 off the transport clock — so it works **regardless of the synth's clock source**
 (it only needs MIDI Rx = ON).
 
+- Its own **▶ Play / ■ Stop** in the panel; playing always starts from step 1.
 - 16 steps, adjustable pattern length, rate 1/8 · 1/16 · 1/32.
 - Per step: note, velocity and gate length. Velocity is a real **enhancement** —
   the synth's own touch keyboard isn't velocity-sensitive.
-- Live playhead; "Send notes" enable; save/load patterns as `.seq` files.
+- Live playhead; save/load patterns as `.seq` files. The grid is always editable
+  by mouse — Record only gates what you *play*.
 - **Recording from a note source** (keyboard or MIDI input), armed with the
   **Record** button:
   - **Step** — play a note to fill the cursor step and advance; `←`/`→` (or the
     arrow keys) move the cursor without erasing; click a pad to place the cursor.
     No running clock needed.
-  - **Live** — with the transport playing, played notes quantize to the nearest
+  - **Live** — with the sequencer playing, played notes quantize to the nearest
     step and how long you hold a note sets its gate.
 
 Polyphony and per-step parameter locks are planned.
+
+## Arpeggiator
+
+A classic arp over the **held notes** (on-screen keyboard or MIDI input): turn
+it **On**, hold a chord, and it plays the notes one at a time in tempo —
+starting immediately, no play button. While it's on, held keys are *owned* by
+the arp (they don't also sound directly, so nothing doubles).
+
+- **Modes:** Up · Down · Up/Down · Down/Up · As played · Random.
+- **Rate** 1/4 · 1/8 · 1/8T · 1/16 · 1/32, octave range 1–4, **gate** length.
+- **Latch** — keeps playing after you release; a fresh press replaces the set.
+- **Swing**, and **velocity modes**: as played / fixed / accent on the beat.
 
 ## Librarian & factory patches
 
 The Phara-O has only 10 patch slots and forgets switch positions, so an app-side
 library is effectively unlimited. Patches are **files** (download / upload — no
-browser storage).
+browser storage). The librarian sits right under the Global row — pick a patch
+first, then tweak the parameters below.
 
 - **Save / Load patch** — JSON files with a `.snp` extension.
+- **Init** — a neutral one-click starting point (poly, filter open, full
+  sustain, no effects). Since the app is one-way, this is also the quickest way
+  to put the synth into a **known state** that matches the UI.
 - **10 factory patches** built in (Classic Bass, Sub Bass, Saw Lead, Soft Pad,
   Pluck Keys, Brass Stab, Fifth Lead, Octave Stack, Ring Bell, LFO Sweep) — one
   click applies them (Resonance/Dry-Wet excepted, as those have no CC).
@@ -140,26 +166,29 @@ src/
 │   ├── params.ts                PARAMS — single source of truth (typed)
 │   ├── midi.svelte.ts           Web MIDI service (CC, notes, clock, in + out)
 │   ├── paramState.svelte.ts     reactive parameter state; sends CC on change
-│   ├── transport.svelte.ts      MIDI clock master + look-ahead tick scheduler
+│   ├── transport.svelte.ts      MIDI clock + look-ahead tick scheduler (internal)
+│   ├── noteGenerator.svelte.ts  which generator plays: off | sequencer | arp
 │   ├── noteSource.svelte.ts     held-notes layer (keyboard + MIDI in → synth)
 │   ├── sequencer.svelte.ts      monophonic step sequencer + step/live recording
+│   ├── arp.svelte.ts            arpeggiator (modes, octaves, latch, swing)
 │   ├── snapshot.ts              capture / download / parse / apply patches
-│   ├── factoryPatches.ts        10 built-in starter patches
+│   ├── factoryPatches.ts        Init + 10 built-in starter patches
 │   └── components/
 │       ├── MidiSetup.svelte
 │       ├── ContinuousControl.svelte
 │       ├── SteppedControl.svelte
 │       ├── UnavailableControl.svelte
-│       ├── TransportControl.svelte
+│       ├── TempoControl.svelte          app-wide tempo card (Global row)
 │       ├── Keyboard.svelte              on-screen piano (mouse + QWERTY)
 │       ├── NoteSourceControl.svelte     note sources panel (thru + panic)
 │       ├── SequencerControl.svelte
+│       ├── ArpControl.svelte
 │       ├── SnapshotBar.svelte
 │       └── HardwareNote.svelte  (currently unused; earmarked for a Help section)
 └── routes/
     ├── +layout.ts               ssr = false (Web MIDI is browser-only)
     ├── +layout.svelte
-    └── +page.svelte             the panel + transport + sequencer + librarian
+    └── +page.svelte             globals → librarian → params → seq → arp → keys
 ```
 
 ## By design / not (yet) supported
@@ -171,13 +200,18 @@ src/
 
 ## Roadmap
 
-- **In-app arpeggiator** — consumes the held notes from the note sources, synced
-  to the transport clock (next up).
 - Alternative **"Synth UI"** (graphical, knob-style) with a toggle to the current
-  parametric view.
+  parametric view (next up).
 - **Polyphonic** steps, **parameter locks**, swing, accents, pattern chaining.
 - Live **clock-source switching over SysEx** (once the SynthTribe message is
   captured), to avoid the hardware's power-on reboot.
+
+### Done since 0.3.x
+
+- **Arpeggiator** (modes, rate, octaves, gate, latch, swing, velocity/accent).
+- **Transport redesign** — no global play button; tempo is a Global-row card and
+  the sequencer/arp each start themselves (mutually exclusive, like one voice).
+- **Init factory patch** + the librarian moved up, keyboard now closes the page.
 
 ### Done since 0.2.x
 

@@ -1,5 +1,5 @@
 /**
- * Factory patch library — a small bank of ~10 classic starting sounds.
+ * Factory patch library — Init plus a small bank of ~10 classic starting sounds.
  *
  * Each patch sets every MIDI-controllable parameter (the 13 continuous CCs plus
  * Voice Mode and Scale) to give a predictable sound regardless of prior state.
@@ -54,6 +54,13 @@ function patch(
 }
 
 export const FACTORY_PATCHES: FactoryPatch[] = [
+	// Kept first on purpose: the neutral base to start editing a sound from —
+	// and the one-click way to put the synth into a known state (the app is
+	// one-way, so this is the only way UI and hardware ever agree).
+	patch('Init', 'Neutral starting point — poly, filter open, full sustain, no effects.', 0, 2, {
+		vcf_cutoff: 127,
+		eg_sustain: 127
+	}),
 	patch('Classic Bass', 'Punchy unison bass with a filter-envelope pluck.', 1, 1, {
 		detune: 18,
 		vcf_cutoff: 50,
