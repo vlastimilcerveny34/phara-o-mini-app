@@ -73,6 +73,18 @@ class MidiService {
 	/** The input we currently have an onmidimessage handler attached to. */
 	#boundInput: MIDIInput | null = null;
 	#noteHandlers = new Set<NoteInputHandler>();
+	/**
+	 * Semitone offset applied to every outgoing note — the Scale (footage)
+	 * emulation. The hardware applies Scale only to its own touch keyboard;
+	 * MIDI notes are absolute pitch. Transposing at this single output boundary
+	 * makes the app keyboard, MIDI input, arp and sequencer all follow the
+	 * Scale switch the way the hardware keys do. Installed by paramState (to
+	 * avoid a circular import); null = no transpose.
+	 */
+	#noteTranspose: (() => number) | null = null;
+	/** original note → actually-sent (transposed) note, so a Note Off matches
+	 * its Note On even if Scale changed while the key was held. */
+	#sounding = new Map<number, number>();
 
 	constructor() {
 		if (typeof navigator === 'undefined' || !('requestMIDIAccess' in navigator)) {
@@ -213,6 +225,11 @@ class MidiService {
 		return () => this.#noteHandlers.delete(handler);
 	}
 
+	/** Install the outgoing-note transpose (see #noteTranspose). */
+	setNoteTranspose(fn: (() => number) | null) {
+		this.#noteTranspose = fn;
+	}
+
 	setChannel(channel: number) {
 		this.channel = Math.min(16, Math.max(1, Math.round(channel)));
 	}
@@ -249,15 +266,19 @@ class MidiService {
 
 	/**
 	 * Send a Note On, optionally scheduled at a `performance.now()`-domain
-	 * timestamp. `note` and `velocity` are clamped to 0-127. Used by the in-app
-	 * sequencer; the synth only needs MIDI Rx = ON to react (independent of its
-	 * clock source).
+	 * timestamp. The Scale transpose is applied here; a note pushed outside the
+	 * MIDI range by the current footage is skipped (returns false). Used by the
+	 * in-app sequencer; the synth only needs MIDI Rx = ON to react (independent
+	 * of its clock source).
 	 */
 	sendNoteOn(note: number, velocity: number, timestamp?: number): boolean {
 		const out = this.#rawOutput();
 		if (!out) return false;
+		const sent = note + (this.#noteTranspose?.() ?? 0);
+		if (sent < 0 || sent > 127) return false; // out of range at this footage
+		this.#sounding.set(note, sent);
 		const status = NOTE_ON_STATUS | ((this.channel - 1) & 0x0f);
-		out.send([status, clamp7(note), clamp7(velocity)], timestamp);
+		out.send([status, sent, clamp7(velocity)], timestamp);
 		return true;
 	}
 
@@ -265,13 +286,18 @@ class MidiService {
 	sendNoteOff(note: number, timestamp?: number): boolean {
 		const out = this.#rawOutput();
 		if (!out) return false;
+		// Release the pitch that actually sounded, not where Scale sits now.
+		const sent = this.#sounding.get(note) ?? note + (this.#noteTranspose?.() ?? 0);
+		this.#sounding.delete(note);
+		if (sent < 0 || sent > 127) return false;
 		const status = NOTE_OFF_STATUS | ((this.channel - 1) & 0x0f);
-		out.send([status, clamp7(note), 0], timestamp);
+		out.send([status, sent, 0], timestamp);
 		return true;
 	}
 
 	/** Panic: send All Notes Off on the current channel so nothing hangs. */
 	allNotesOff(): boolean {
+		this.#sounding.clear();
 		const out = this.#rawOutput();
 		if (!out) return false;
 		const status = CC_STATUS | ((this.channel - 1) & 0x0f);

@@ -10,6 +10,9 @@
 import { CONTINUOUS_PARAMS, STEPPED_PARAMS, type SteppedParam } from './params';
 import { midi } from './midi.svelte';
 
+/** Option index of the 8' footage in the Scale param (32' 16' [8'] 4' 2' 1'). */
+const SCALE_REFERENCE_INDEX = 2;
+
 /** Continuous values keyed by param id (0-127). */
 const continuous = $state<Record<string, number>>(defaultContinuous());
 
@@ -28,6 +31,10 @@ function defaultContinuous(): Record<string, number> {
 function defaultStepped(): Record<string, number> {
 	const out: Record<string, number> = {};
 	for (const p of STEPPED_PARAMS) out[p.id] = 0; // first option
+	// Scale defaults to 8' — the reference footage where MIDI pitch and the
+	// hardware keyboard agree (confirmed by ear on the hardware), so the app
+	// starts with no note transpose.
+	if ('scale' in out) out['scale'] = SCALE_REFERENCE_INDEX;
 	return out;
 }
 
@@ -73,3 +80,14 @@ export const paramState = {
 		return param.options[idx].send;
 	}
 };
+
+// Scale (footage) emulation. The hardware applies Scale only to its own touch
+// keyboard — MIDI notes are absolute pitch — so a player on the app keyboard
+// (or a MIDI controller) would hear no register change when flipping Scale.
+// Emulate it: transpose every outgoing note by one octave per footage step,
+// with 8' as the do-nothing reference. CC 41 is still sent as well, keeping
+// the hardware's own keys in the same register. Installed here rather than in
+// midi.svelte.ts because paramState already depends on midi (no import cycle).
+midi.setNoteTranspose(
+	() => ((stepped['scale'] ?? SCALE_REFERENCE_INDEX) - SCALE_REFERENCE_INDEX) * 12
+);

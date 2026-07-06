@@ -6,10 +6,14 @@ whole point of this app is to **show you the numeric value** of every parameter
 as you change it — and, beyond editing, to **play, record and sequence** the
 synth from the computer.
 
-> **Status: beta (0.4.x).** Core editor, snapshot librarian (with an Init
-> patch), a monophonic step sequencer with step/live recording, an
-> **arpeggiator**, and note sources (on-screen keyboard + MIDI input) are
-> working. More is planned — see [Roadmap](#roadmap).
+It has two interchangeable faces: a **Synth view** (a one-screen faceplate with
+knobs, the default) and a **Parametric view** (labelled sliders with big numeric
+readouts). Same state underneath — a toggle in the header switches them.
+
+> **Status: beta (0.5.x).** Two UIs (synth-style + parametric), snapshot
+> librarian (with an Init patch), a monophonic step sequencer with step/live
+> recording, an **arpeggiator**, note sources (on-screen keyboard + MIDI input),
+> and **Scale-footage transpose**. More is planned — see [Roadmap](#roadmap).
 
 ## Design premise (read this)
 
@@ -61,19 +65,46 @@ powering up; see the manual):
   sequencer/arp/tempo-delay to follow the app's clock. The app's step sequencer
   does **not** need this — it sends notes itself.
 
+## Two UIs (synth ⇄ parametric)
+
+A toggle in the header switches between two complete views of the same state
+(session-only; the app stores nothing in the browser):
+
+- **Synth** *(default)* — a single-screen "faceplate": knobs laid out roughly
+  like the hardware panel (VCO · VCF · Mode on top; LFO · EG · Delay below —
+  Scale folded into VCO), a compact patch bar and MIDI drawer in the header, a
+  control strip for the sequencer/arp, and the keyboard closing the page.
+  Knobs take a vertical drag (Shift = fine), the mouse wheel, or arrow keys, and
+  still show the numeric value underneath. It deliberately does **not** copy the
+  hardware's appearance — only the coarse control placement.
+- **Parametric** — the original labelled sliders + big numeric readouts, stacked
+  section by section. Best when you want to read/type exact values.
+
 ## What it controls
 
 Parameter data comes from the official MIDI implementation chart and lives in one
 typed config, [`src/lib/params.ts`](src/lib/params.ts) — the single source of
-truth. The UI panel is just a map over it.
+truth. Both UIs are just a map over it.
 
-- **13 continuous CC params** (0–127) — sliders with a big live value readout.
-- **Stepped params** (Voice Mode CC 40, Scale CC 41) — named-option selectors.
-  For bands we transmit the **middle** of each band to avoid the chart's
-  overlapping Voice Mode boundaries (Unison Ring = 100, Poly Ring = 120).
+- **13 continuous CC params** (0–127) — sliders / knobs with a live value readout.
+- **Stepped params** (Voice Mode CC 40, Scale CC 41) — named-option selectors
+  (segmented in parametric, detented knobs in synth). For bands we transmit the
+  **middle** of each band to avoid the chart's overlapping Voice Mode boundaries
+  (Unison Ring = 100, Poly Ring = 120).
 - **Not MIDI-controllable (shown disabled):** Volume, Resonance and Dry/Wet —
   they are absent from the CC chart and there is no NRPN for them either, so they
   must be set on the hardware. We do **not** guess MIDI numbers.
+
+### Scale (footage) transpose
+
+On the hardware, **Scale** shifts the register of the synth's *own* touch
+keyboard — but MIDI notes carry absolute pitch, so on their own they'd ignore
+it. The app emulates the footage: every outgoing note is transposed one octave
+per Scale step, with **8' as the reference** (no shift), so the on-screen
+keyboard, MIDI input, arp and sequencer all follow Scale the way the hardware
+keys do. CC 41 is still sent as well, keeping the synth's own keys in the same
+register. Note-offs always release the pitch that actually sounded, so changing
+Scale mid-note never leaves a note hanging.
 
 ## Tempo & clock (no play button)
 
@@ -164,8 +195,9 @@ src/
 ├── app.css                      global tokens/theme
 ├── lib/
 │   ├── params.ts                PARAMS — single source of truth (typed)
-│   ├── midi.svelte.ts           Web MIDI service (CC, notes, clock, in + out)
+│   ├── midi.svelte.ts           Web MIDI service (CC, notes, clock, in + out; Scale transpose)
 │   ├── paramState.svelte.ts     reactive parameter state; sends CC on change
+│   ├── uiMode.svelte.ts         which face is showing: synth | parametric
 │   ├── transport.svelte.ts      MIDI clock + look-ahead tick scheduler (internal)
 │   ├── noteGenerator.svelte.ts  which generator plays: off | sequencer | arp
 │   ├── noteSource.svelte.ts     held-notes layer (keyboard + MIDI in → synth)
@@ -174,8 +206,10 @@ src/
 │   ├── snapshot.ts              capture / download / parse / apply patches
 │   ├── factoryPatches.ts        Init + 10 built-in starter patches
 │   └── components/
+│       ├── SynthView.svelte             faceplate view (knobs + strip + keys)
+│       ├── Knob.svelte                  rotary knob (drag / wheel / keys)
 │       ├── MidiSetup.svelte
-│       ├── ContinuousControl.svelte
+│       ├── ContinuousControl.svelte     parametric slider
 │       ├── SteppedControl.svelte
 │       ├── UnavailableControl.svelte
 │       ├── TempoControl.svelte          app-wide tempo card (Global row)
@@ -188,7 +222,7 @@ src/
 └── routes/
     ├── +layout.ts               ssr = false (Web MIDI is browser-only)
     ├── +layout.svelte
-    └── +page.svelte             globals → librarian → params → seq → arp → keys
+    └── +page.svelte             synth view, or parametric: globals → librarian → params → seq → arp → keys
 ```
 
 ## By design / not (yet) supported
@@ -200,11 +234,19 @@ src/
 
 ## Roadmap
 
-- Alternative **"Synth UI"** (graphical, knob-style) with a toggle to the current
-  parametric view (next up).
+- Reconcile the keyboard's **octave shift** with the Scale transpose — two
+  register controls side by side can read as redundant; likely clearer labelling
+  or a combined display.
 - **Polyphonic** steps, **parameter locks**, swing, accents, pattern chaining.
 - Live **clock-source switching over SysEx** (once the SynthTribe message is
   captured), to avoid the hardware's power-on reboot.
+
+### Done since 0.4.x
+
+- **Synth view** — a one-screen knob faceplate, default UI, with a header toggle
+  to the parametric view.
+- **Scale-footage transpose** — the app keyboard, MIDI input, arp and sequencer
+  now follow the Scale switch like the hardware keys (8' reference).
 
 ### Done since 0.3.x
 

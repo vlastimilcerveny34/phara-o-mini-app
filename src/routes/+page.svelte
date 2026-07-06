@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { PANEL_GROUPS, panelParams, type Param } from '$lib/params';
 	import { midi } from '$lib/midi.svelte';
+	import { uiMode } from '$lib/uiMode.svelte';
+	import SynthView from '$lib/components/SynthView.svelte';
 	import MidiSetup from '$lib/components/MidiSetup.svelte';
 	import TempoControl from '$lib/components/TempoControl.svelte';
 	import NoteSourceControl from '$lib/components/NoteSourceControl.svelte';
@@ -42,63 +44,82 @@
 	<header class="masthead">
 		<div>
 			<h1>Phara-O Mini <span>Editor / Librarian</span></h1>
-			<p class="tagline">
-				The synth has no display — so this app shows you the numbers. Values here are what
-				the app sends; the hardware can't report back.
-			</p>
+			{#if uiMode.mode === 'parametric'}
+				<p class="tagline">
+					The synth has no display — so this app shows you the numbers. Values here are what
+					the app sends; the hardware can't report back.
+				</p>
+			{/if}
 		</div>
-		{#if !midi.isReady && midi.status !== 'unsupported'}
-			<span class="pill warn">Not sending — connect MIDI</span>
-		{:else if midi.isReady}
-			<span class="pill live">Live · {midi.selectedPort?.name} · ch {midi.channel}</span>
-		{/if}
+		<div class="masthead-right">
+			{#if !midi.isReady && midi.status !== 'unsupported'}
+				<span class="pill warn">Not sending — connect MIDI</span>
+			{:else if midi.isReady}
+				<span class="pill live">Live · {midi.selectedPort?.name} · ch {midi.channel}</span>
+			{/if}
+			<div class="ui-toggle" role="group" aria-label="UI mode">
+				<button class:sel={uiMode.mode === 'synth'} onclick={() => uiMode.set('synth')}
+					>Synth</button
+				>
+				<button
+					class:sel={uiMode.mode === 'parametric'}
+					onclick={() => uiMode.set('parametric')}>Parametric</button
+				>
+			</div>
+		</div>
 	</header>
 
-	{#if globalGroup}
-		<section class="group">
-			<h2 class="group-title">{globalGroup.label}</h2>
-			<div class="grid">
-				{#each globalGroup.params as param (param.id)}
-					{@render control(param)}
-				{/each}
-				<!-- Tempo (the app-wide clock rate) + MIDI setup ride as equal-sized cards
-				     in the Global row, after Scale and Voice Mode. -->
-				<TempoControl />
-				<MidiSetup />
-			</div>
-		</section>
-	{/if}
-
-	<!-- Patch management sits right under Global — pick a patch (or Init) first,
-	     then tweak the parameters below. The keyboard closes the page, like on a
-	     real instrument: control panel on top, keys at the bottom. -->
-	<SnapshotBar />
-
-	<main>
-		{#each otherGroups as group (group.id)}
+	{#if uiMode.mode === 'synth'}
+		<!-- Synth view: the whole app on one faceplate, keyboard at the bottom,
+		     nothing below it. Same state, different skin. -->
+		<SynthView />
+	{:else}
+		{#if globalGroup}
 			<section class="group">
-				<h2 class="group-title">{group.label}</h2>
+				<h2 class="group-title">{globalGroup.label}</h2>
 				<div class="grid">
-					{#each group.params as param (param.id)}
+					{#each globalGroup.params as param (param.id)}
 						{@render control(param)}
 					{/each}
+					<!-- Tempo (the app-wide clock rate) + MIDI setup ride as equal-sized cards
+					     in the Global row, after Scale and Voice Mode. -->
+					<TempoControl />
+					<MidiSetup />
 				</div>
 			</section>
-		{/each}
-	</main>
+		{/if}
 
-	<SequencerControl />
+		<!-- Patch management sits right under Global — pick a patch (or Init) first,
+		     then tweak the parameters below. The keyboard closes the page, like on a
+		     real instrument: control panel on top, keys at the bottom. -->
+		<SnapshotBar />
 
-	<ArpControl />
+		<main>
+			{#each otherGroups as group (group.id)}
+				<section class="group">
+					<h2 class="group-title">{group.label}</h2>
+					<div class="grid">
+						{#each group.params as param (param.id)}
+							{@render control(param)}
+						{/each}
+					</div>
+				</section>
+			{/each}
+		</main>
 
-	<NoteSourceControl />
+		<SequencerControl />
 
-	<footer>
-		<p>
-			Phara-O Mini editor · one-way MIDI CC control · no data is read from the hardware. Built
-			on standard Web MIDI, so it runs anywhere a browser supports it.
-		</p>
-	</footer>
+		<ArpControl />
+
+		<NoteSourceControl />
+
+		<footer>
+			<p>
+				Phara-O Mini editor · one-way MIDI CC control · no data is read from the hardware. Built
+				on standard Web MIDI, so it runs anywhere a browser supports it.
+			</p>
+		</footer>
+	{/if}
 </div>
 
 <style>
@@ -148,6 +169,34 @@
 		background: color-mix(in srgb, var(--ok) 15%, transparent);
 		color: var(--ok);
 		border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+	}
+	.masthead-right {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		flex-wrap: wrap;
+	}
+	.ui-toggle {
+		display: flex;
+		border: 1px solid var(--border-strong);
+		border-radius: 9px;
+		overflow: hidden;
+	}
+	.ui-toggle button {
+		background: var(--bg-input);
+		border: none;
+		border-left: 1px solid var(--border-strong);
+		color: var(--text-dim);
+		font-size: 0.78rem;
+		font-weight: 600;
+		padding: 0.4rem 0.75rem;
+	}
+	.ui-toggle button:first-child {
+		border-left: none;
+	}
+	.ui-toggle button.sel {
+		background: color-mix(in srgb, var(--accent) 30%, var(--bg-input));
+		color: var(--text);
 	}
 	main {
 		display: flex;
