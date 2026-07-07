@@ -1,36 +1,36 @@
 <script lang="ts">
-	import { midi } from '$lib/midi.svelte';
 	import {
 		captureSnapshot,
 		downloadSnapshot,
 		parseSnapshot,
-		applySnapshot,
+		applySnapshotWithReport,
 		type Snapshot
 	} from '$lib/snapshot';
 	import { FACTORY_PATCHES, factoryToSnapshot, type FactoryPatch } from '$lib/factoryPatches';
+	import { Feedback } from '$lib/feedback.svelte';
 
 	let snapshotName = $state('');
 	let fileInput: HTMLInputElement;
 
-	type Feedback = { kind: 'ok' | 'bad'; text: string } | null;
-	let feedback = $state<Feedback>(null);
+	const feedback = new Feedback();
 	let busy = $state(false);
-
-	function flash(kind: 'ok' | 'bad', text: string) {
-		feedback = { kind, text };
-		setTimeout(() => {
-			feedback = null;
-		}, 5000);
-	}
 
 	function onSave() {
 		const snap = captureSnapshot(snapshotName || 'Untitled');
 		downloadSnapshot(snap);
-		flash('ok', `Saved “${snap.name}”.`);
+		feedback.flash('ok', `Saved “${snap.name}”.`);
 	}
 
 	function onPickFile() {
 		fileInput.click();
+	}
+
+	async function apply(snap: Snapshot) {
+		snapshotName = snap.name;
+		busy = true;
+		const result = await applySnapshotWithReport(snap);
+		busy = false;
+		feedback.flash(result.ok ? 'ok' : 'bad', result.text);
 	}
 
 	async function onFileChosen(e: Event) {
@@ -41,40 +41,16 @@
 
 		let snap: Snapshot;
 		try {
-			const text = await file.text();
-			snap = parseSnapshot(text);
+			snap = parseSnapshot(await file.text());
 		} catch (err) {
-			flash('bad', err instanceof Error ? err.message : 'Could not read file.');
+			feedback.flash('bad', err instanceof Error ? err.message : 'Could not read file.');
 			return;
 		}
-
-		snapshotName = snap.name;
-
-		if (!midi.isReady) {
-			// Still load values into the UI so the user sees them; just can't send.
-			busy = true;
-			await applySnapshot(snap); // sendBatch no-ops without a port
-			busy = false;
-			flash('bad', `Loaded “${snap.name}” into UI, but no MIDI port — nothing sent.`);
-			return;
-		}
-
-		busy = true;
-		const sent = await applySnapshot(snap);
-		busy = false;
-		flash('ok', `Loaded “${snap.name}” — sent ${sent} messages to the synth.`);
+		await apply(snap);
 	}
 
 	async function onFactory(p: FactoryPatch) {
-		snapshotName = p.name;
-		busy = true;
-		const sent = await applySnapshot(factoryToSnapshot(p));
-		busy = false;
-		if (midi.isReady) {
-			flash('ok', `Loaded “${p.name}” — sent ${sent} messages to the synth.`);
-		} else {
-			flash('bad', `Loaded “${p.name}” into UI, but no MIDI port — nothing sent.`);
-		}
+		await apply(factoryToSnapshot(p));
 	}
 </script>
 
@@ -122,8 +98,8 @@
 		</div>
 	</div>
 
-	{#if feedback}
-		<p class="feedback {feedback.kind}">{feedback.text}</p>
+	{#if feedback.message}
+		<p class="feedback {feedback.message.kind}">{feedback.message.text}</p>
 	{/if}
 </section>
 

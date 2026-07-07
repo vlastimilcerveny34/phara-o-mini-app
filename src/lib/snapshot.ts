@@ -14,9 +14,10 @@ import {
 	type SteppedParam
 } from './params';
 import { paramState } from './paramState.svelte';
-import { midi } from './midi.svelte';
+import { midi, clamp7 } from './midi.svelte';
+import { SNAPSHOT_FORMAT, parseTaggedJson, downloadJson } from './files';
 
-export const SNAPSHOT_FORMAT = 'phara-o-mini-snapshot';
+export { SNAPSHOT_FORMAT };
 export const SNAPSHOT_VERSION = 1;
 
 export type Snapshot = {
@@ -48,41 +49,14 @@ export function captureSnapshot(name = 'Untitled'): Snapshot {
 	};
 }
 
-/** Trigger a browser download of the snapshot as a .json file. */
+/** Trigger a browser download of the snapshot as a .snp (JSON) file. */
 export function downloadSnapshot(snapshot: Snapshot) {
-	const json = JSON.stringify(snapshot, null, 2);
-	const blob = new Blob([json], { type: 'application/json' });
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement('a');
-	a.href = url;
-	a.download = `${safeFileName(snapshot.name)}.snp`;
-	document.body.appendChild(a);
-	a.click();
-	a.remove();
-	URL.revokeObjectURL(url);
+	downloadJson(snapshot, snapshot.name, 'snp', 'snapshot');
 }
 
 /** Parse + validate an uploaded JSON string into a Snapshot. Throws on bad input. */
 export function parseSnapshot(text: string): Snapshot {
-	let data: unknown;
-	try {
-		data = JSON.parse(text);
-	} catch {
-		throw new Error('File is not valid JSON.');
-	}
-	if (typeof data !== 'object' || data === null) {
-		throw new Error('Snapshot must be a JSON object.');
-	}
-	const obj = data as Record<string, unknown>;
-	// Friendlier guard: catch a sequencer pattern loaded into the patch slot.
-	// (Literal mirrors PATTERN_FORMAT in sequencer.svelte.ts — kept inline to
-	// avoid a circular import between the two modules.)
-	if (obj.format === 'phara-o-mini-pattern') {
-		throw new Error('This is a sequencer pattern (.seq), not a patch — load it in the Sequencer.');
-	}
-	if (obj.format !== SNAPSHOT_FORMAT) {
-		throw new Error('This does not look like a Phara-O Mini patch.');
-	}
+	const obj = parseTaggedJson(text, SNAPSHOT_FORMAT);
 	const continuous = coerceNumberMap(obj.continuous);
 	const stepped = coerceNumberMap(obj.stepped);
 
@@ -124,6 +98,20 @@ export async function applySnapshot(snapshot: Snapshot, gapMs = 8): Promise<numb
 	return result.sent;
 }
 
+/**
+ * Apply a snapshot and describe the outcome for the status line — shared by
+ * both librarian UIs (SnapshotBar and the synth view's mini-librarian) so
+ * their messages stay consistent.
+ */
+export async function applySnapshotWithReport(
+	snapshot: Snapshot
+): Promise<{ ok: boolean; text: string }> {
+	const sent = await applySnapshot(snapshot); // no-ops on MIDI without a port
+	return midi.isReady
+		? { ok: true, text: `Loaded “${snapshot.name}” — sent ${sent} messages to the synth.` }
+		: { ok: false, text: `Loaded “${snapshot.name}” into UI, but no MIDI port — nothing sent.` };
+}
+
 function resolveStepIndex(param: SteppedParam, stored: unknown): number {
 	if (typeof stored !== 'number') return 0;
 	return Math.min(param.options.length - 1, Math.max(0, Math.round(stored)));
@@ -138,10 +126,3 @@ function coerceNumberMap(input: unknown): Record<string, number> {
 	return out;
 }
 
-function clamp7(n: number): number {
-	return Math.min(127, Math.max(0, Math.round(n)));
-}
-
-function safeFileName(name: string): string {
-	return name.replace(/[^a-z0-9-_]+/gi, '_').replace(/^_+|_+$/g, '') || 'snapshot';
-}

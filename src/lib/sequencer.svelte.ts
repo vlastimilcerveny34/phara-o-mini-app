@@ -13,6 +13,7 @@ import { transport, type TickConsumer } from './transport.svelte';
 import { midi } from './midi.svelte';
 import { noteSources } from './noteSource.svelte';
 import { noteGenerator } from './noteGenerator.svelte';
+import { PATTERN_FORMAT, parseTaggedJson, downloadJson } from './files';
 
 export const MAX_STEPS = 16;
 export const MIN_NOTE = 24; // C1
@@ -38,7 +39,7 @@ export const DIVISIONS = [
 	{ label: '1/32', ticksPerStep: 3 }
 ] as const;
 
-export const PATTERN_FORMAT = 'phara-o-mini-pattern';
+export { PATTERN_FORMAT };
 export const PATTERN_VERSION = 1;
 
 export type PatternFile = {
@@ -281,25 +282,7 @@ export const sequencer = new Sequencer();
 
 /** Parse + validate an uploaded JSON string into a PatternFile. Throws on bad input. */
 export function parsePattern(text: string): PatternFile {
-	let data: unknown;
-	try {
-		data = JSON.parse(text);
-	} catch {
-		throw new Error('File is not valid JSON.');
-	}
-	if (typeof data !== 'object' || data === null) {
-		throw new Error('Pattern must be a JSON object.');
-	}
-	const obj = data as Record<string, unknown>;
-	// Friendlier guard: catch a patch loaded into the sequencer slot.
-	// (Literal mirrors SNAPSHOT_FORMAT in snapshot.ts — kept inline to avoid a
-	// circular import between the two modules.)
-	if (obj.format === 'phara-o-mini-snapshot') {
-		throw new Error('This is a patch (.snp), not a pattern — load it in the Snapshot Librarian.');
-	}
-	if (obj.format !== PATTERN_FORMAT) {
-		throw new Error('This does not look like a Phara-O Mini pattern.');
-	}
+	const obj = parseTaggedJson(text, PATTERN_FORMAT);
 	const steps = Array.isArray(obj.steps) ? (obj.steps as Step[]) : [];
 	return {
 		format: PATTERN_FORMAT,
@@ -312,20 +295,7 @@ export function parsePattern(text: string): PatternFile {
 	};
 }
 
-/** Trigger a browser download of a pattern as a .json file. */
+/** Trigger a browser download of a pattern as a .seq (JSON) file. */
 export function downloadPattern(pattern: PatternFile) {
-	const json = JSON.stringify(pattern, null, 2);
-	const blob = new Blob([json], { type: 'application/json' });
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement('a');
-	a.href = url;
-	a.download = `${safeFileName(pattern.name)}.seq`;
-	document.body.appendChild(a);
-	a.click();
-	a.remove();
-	URL.revokeObjectURL(url);
-}
-
-function safeFileName(name: string): string {
-	return name.replace(/[^a-z0-9-_]+/gi, '_').replace(/^_+|_+$/g, '') || 'pattern';
+	downloadJson(pattern, pattern.name, 'seq', 'pattern');
 }

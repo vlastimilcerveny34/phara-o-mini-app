@@ -334,7 +334,8 @@ class MidiService {
 	}
 }
 
-function clamp7(n: number): number {
+/** Clamp to the 7-bit MIDI data range (0-127), rounding to an integer. */
+export function clamp7(n: number): number {
 	return Math.min(127, Math.max(0, Math.round(n)));
 }
 

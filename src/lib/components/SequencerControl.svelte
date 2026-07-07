@@ -10,21 +10,16 @@
 		downloadPattern,
 		type PatternFile
 	} from '$lib/sequencer.svelte';
+	import { Feedback } from '$lib/feedback.svelte';
 
 	let patternName = $state('');
 	let fileInput: HTMLInputElement;
 
-	type Feedback = { kind: 'ok' | 'bad'; text: string } | null;
-	let feedback = $state<Feedback>(null);
+	const feedback = new Feedback();
 
 	let ready = $derived(midi.isReady);
 	let active = $derived(noteGenerator.active === 'sequencer');
 	let step = $derived(sequencer.steps[sequencer.cursor]);
-
-	function flash(kind: 'ok' | 'bad', text: string) {
-		feedback = { kind, text };
-		setTimeout(() => (feedback = null), 5000);
-	}
 
 	function onPad(i: number) {
 		sequencer.setCursor(i);
@@ -57,7 +52,7 @@
 
 	function onSave() {
 		downloadPattern(sequencer.serialize(patternName || 'Untitled'));
-		flash('ok', 'Pattern saved.');
+		feedback.flash('ok', 'Pattern saved.');
 	}
 
 	function onPickFile() {
@@ -73,12 +68,12 @@
 		try {
 			pat = parsePattern(await file.text());
 		} catch (err) {
-			flash('bad', err instanceof Error ? err.message : 'Could not read file.');
+			feedback.flash('bad', err instanceof Error ? err.message : 'Could not read file.');
 			return;
 		}
 		sequencer.load(pat);
 		patternName = pat.name;
-		flash('ok', `Loaded “${pat.name}”.`);
+		feedback.flash('ok', `Loaded “${pat.name}”.`);
 	}
 </script>
 
@@ -235,8 +230,8 @@
 		/>
 	</div>
 
-	{#if feedback}
-		<p class="feedback {feedback.kind}">{feedback.text}</p>
+	{#if feedback.message}
+		<p class="feedback {feedback.message.kind}">{feedback.message.text}</p>
 	{/if}
 
 	{#if !ready}

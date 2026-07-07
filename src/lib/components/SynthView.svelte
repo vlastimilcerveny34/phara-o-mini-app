@@ -18,10 +18,11 @@
 		captureSnapshot,
 		downloadSnapshot,
 		parseSnapshot,
-		applySnapshot,
+		applySnapshotWithReport,
 		type Snapshot
 	} from '$lib/snapshot';
 	import { FACTORY_PATCHES, factoryToSnapshot } from '$lib/factoryPatches';
+	import { Feedback } from '$lib/feedback.svelte';
 	import Knob from './Knob.svelte';
 	import MidiSetup from './MidiSetup.svelte';
 	import SequencerControl from './SequencerControl.svelte';
@@ -55,19 +56,21 @@
 	// --- patch mini-librarian (same actions as SnapshotBar, compact) ----------
 	let patchName = $state('');
 	let busy = $state(false);
-	type Feedback = { kind: 'ok' | 'bad'; text: string } | null;
-	let feedback = $state<Feedback>(null);
+	const feedback = new Feedback();
 	let fileInput: HTMLInputElement;
-
-	function flash(kind: 'ok' | 'bad', text: string) {
-		feedback = { kind, text };
-		setTimeout(() => (feedback = null), 5000);
-	}
 
 	function onSave() {
 		const snap = captureSnapshot(patchName || 'Untitled');
 		downloadSnapshot(snap);
-		flash('ok', `Saved “${snap.name}”.`);
+		feedback.flash('ok', `Saved “${snap.name}”.`);
+	}
+
+	async function apply(snap: Snapshot) {
+		patchName = snap.name;
+		busy = true;
+		const result = await applySnapshotWithReport(snap);
+		busy = false;
+		feedback.flash(result.ok ? 'ok' : 'bad', result.text);
 	}
 
 	async function onFileChosen(e: Event) {
@@ -79,15 +82,10 @@
 		try {
 			snap = parseSnapshot(await file.text());
 		} catch (err) {
-			flash('bad', err instanceof Error ? err.message : 'Could not read file.');
+			feedback.flash('bad', err instanceof Error ? err.message : 'Could not read file.');
 			return;
 		}
-		patchName = snap.name;
-		busy = true;
-		const sent = await applySnapshot(snap);
-		busy = false;
-		if (ready) flash('ok', `Loaded “${snap.name}” — sent ${sent} messages.`);
-		else flash('bad', `Loaded “${snap.name}” into UI, but no MIDI port — nothing sent.`);
+		await apply(snap);
 	}
 
 	async function onFactoryPick(e: Event) {
@@ -95,12 +93,7 @@
 		const p = FACTORY_PATCHES.find((f) => f.name === sel.value);
 		sel.value = ''; // reset to the placeholder so re-picking works
 		if (!p) return;
-		patchName = p.name;
-		busy = true;
-		const sent = await applySnapshot(factoryToSnapshot(p));
-		busy = false;
-		if (ready) flash('ok', `Loaded “${p.name}” — sent ${sent} messages.`);
-		else flash('bad', `Loaded “${p.name}” into UI, but no MIDI port — nothing sent.`);
+		await apply(factoryToSnapshot(p));
 	}
 
 	const VEL_MODES: { id: ArpVelocityMode; label: string }[] = [
@@ -181,8 +174,8 @@
 		</div>
 	</header>
 
-	{#if feedback}
-		<p class="feedback {feedback.kind}">{feedback.text}</p>
+	{#if feedback.message}
+		<p class="feedback {feedback.message.kind}">{feedback.message.text}</p>
 	{/if}
 
 	{#if midiOpen || (!ready && midi.status !== 'unsupported')}
