@@ -6,7 +6,8 @@
 		applySnapshotWithReport,
 		type Snapshot
 	} from '$lib/snapshot';
-	import { FACTORY_PATCHES, factoryToSnapshot, type FactoryPatch } from '$lib/factoryPatches';
+	import { FACTORY_PATCHES, INIT_PATCH, factoryToSnapshot, type FactoryPatch } from '$lib/factoryPatches';
+	import { mutateParams } from '$lib/mutate';
 	import { Feedback } from '$lib/feedback.svelte';
 
 	let snapshotName = $state('');
@@ -15,10 +16,17 @@
 	const feedback = new Feedback();
 	let busy = $state(false);
 
-	function onSave() {
+	async function onSave() {
 		const snap = captureSnapshot(snapshotName || 'Untitled');
-		downloadSnapshot(snap);
-		feedback.flash('ok', `Saved “${snap.name}”.`);
+		busy = true;
+		const saved = await downloadSnapshot(snap);
+		busy = false;
+		if (saved) feedback.flash('ok', `Saved “${snap.name}”.`);
+	}
+
+	function onMutate() {
+		mutateParams();
+		feedback.flash('ok', 'Mutated — press again to drift further.');
 	}
 
 	function onPickFile() {
@@ -75,6 +83,18 @@
 		<button class="btn accent" onclick={onPickFile} disabled={busy}>
 			{busy ? 'Loading…' : 'Load snapshot'}
 		</button>
+		<button
+			class="btn"
+			onclick={() => onFactory(INIT_PATCH)}
+			disabled={busy}
+			title={INIT_PATCH.description}>Init</button
+		>
+		<button
+			class="btn"
+			onclick={onMutate}
+			disabled={busy}
+			title="Nudge every knob a little — repeat to drift further">Mutate</button
+		>
 		<input
 			bind:this={fileInput}
 			type="file"

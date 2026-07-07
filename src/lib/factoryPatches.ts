@@ -53,14 +53,21 @@ function patch(
 	};
 }
 
+/**
+ * The neutral base to start editing a sound from — and the one-click way to
+ * put the synth into a known state (the app is one-way, so this is the only
+ * way UI and hardware ever agree). Rendered as a dedicated Init button in both
+ * librarian UIs rather than living in the factory bank.
+ */
+export const INIT_PATCH: FactoryPatch = patch(
+	'Init',
+	'Neutral starting point — poly, filter open, full sustain, no effects.',
+	0,
+	2,
+	{ vcf_cutoff: 127, eg_sustain: 127 }
+);
+
 export const FACTORY_PATCHES: FactoryPatch[] = [
-	// Kept first on purpose: the neutral base to start editing a sound from —
-	// and the one-click way to put the synth into a known state (the app is
-	// one-way, so this is the only way UI and hardware ever agree).
-	patch('Init', 'Neutral starting point — poly, filter open, full sustain, no effects.', 0, 2, {
-		vcf_cutoff: 127,
-		eg_sustain: 127
-	}),
 	patch('Classic Bass', 'Punchy unison bass with a filter-envelope pluck.', 1, 1, {
 		detune: 18,
 		vcf_cutoff: 50,
