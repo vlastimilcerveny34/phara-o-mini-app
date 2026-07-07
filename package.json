@@ -41,5 +41,8 @@
   },
   "overrides": {
     "cookie": "^0.7.2"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
   }
 }
