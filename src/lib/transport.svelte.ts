@@ -32,6 +32,10 @@ export const PPQN = 24;
 const LOOKAHEAD_MS = 100;
 const INTERVAL_MS = 25;
 
+/** Max delay of every 2nd step, as a fraction of a step — shared by the swing
+ * controls of both clock consumers (arp and step sequencer). */
+export const MAX_SWING = 0.6;
+
 /**
  * A consumer of the transport's musical clock (e.g. the step sequencer). It is
  * driven off the same look-ahead scheduler that emits MIDI clock, so its events

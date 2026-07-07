@@ -50,7 +50,7 @@ export const ARP_DIVISIONS = [
 /** How the arp picks each note's velocity (velocity is audible on this synth). */
 export type ArpVelocityMode = 'played' | 'fixed' | 'accent';
 
-export const MAX_SWING = 0.6;
+export { MAX_SWING } from './transport.svelte';
 
 type ArpNote = { note: number; vel: number };
 

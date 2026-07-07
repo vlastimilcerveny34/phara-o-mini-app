@@ -10,6 +10,7 @@
 		downloadPattern,
 		type PatternFile
 	} from '$lib/sequencer.svelte';
+	import { MAX_SWING } from '$lib/transport.svelte';
 	import { Feedback } from '$lib/feedback.svelte';
 
 	let patternName = $state('');
@@ -50,9 +51,9 @@
 		return () => window.removeEventListener('keydown', onKey);
 	});
 
-	function onSave() {
-		downloadPattern(sequencer.serialize(patternName || 'Untitled'));
-		feedback.flash('ok', 'Pattern saved.');
+	async function onSave() {
+		const saved = await downloadPattern(sequencer.serialize(patternName || 'Untitled'));
+		if (saved) feedback.flash('ok', 'Pattern saved.');
 	}
 
 	function onPickFile() {
@@ -159,6 +160,17 @@
 					<option value={d.ticksPerStep}>{d.label}</option>
 				{/each}
 			</select>
+		</label>
+		<label class="swing">
+			<span>Swing <em>{Math.round(sequencer.swing * 100)}%</em></span>
+			<input
+				type="range"
+				min="0"
+				max={MAX_SWING}
+				step="0.05"
+				bind:value={sequencer.swing}
+				title="Delay every 2nd step for a shuffle feel"
+			/>
 		</label>
 		<button class="mini" onclick={() => sequencer.clearAll()}>Clear</button>
 	</div>
@@ -408,6 +420,16 @@
 		font-size: 0.85rem;
 		color: var(--text);
 		width: 5rem;
+	}
+	.settings .swing input[type='range'] {
+		width: 6rem;
+		margin-bottom: 0.5rem;
+	}
+	.settings .swing em {
+		font-style: normal;
+		color: var(--text-dim);
+		font-family: var(--mono);
+		text-transform: none;
 	}
 	.grid {
 		display: grid;

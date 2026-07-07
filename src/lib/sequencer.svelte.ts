@@ -9,11 +9,11 @@
  * State fields are Svelte 5 runes so the editor stays reactive.
  */
 
-import { transport, type TickConsumer } from './transport.svelte';
+import { transport, MAX_SWING, type TickConsumer } from './transport.svelte';
 import { midi } from './midi.svelte';
 import { noteSources } from './noteSource.svelte';
 import { noteGenerator } from './noteGenerator.svelte';
-import { PATTERN_FORMAT, parseTaggedJson, downloadJson } from './files';
+import { PATTERN_FORMAT, parseTaggedJson, saveJson } from './files';
 
 export const MAX_STEPS = 16;
 export const MIN_NOTE = 24; // C1
@@ -49,6 +49,8 @@ export type PatternFile = {
 	name: string;
 	length: number;
 	ticksPerStep: number;
+	/** Delay of every 2nd step as a fraction of a step (0 = straight). */
+	swing: number;
 	steps: Step[];
 };
 
@@ -78,6 +80,8 @@ class Sequencer implements TickConsumer {
 	steps = $state<Step[]>(defaultSteps());
 	length = $state(MAX_STEPS);
 	ticksPerStep = $state(6); // 1/16 notes
+	/** Delay of every 2nd step as a fraction of a step (same feel as the arp's). */
+	swing = $state(0);
 	/** Currently lit step for the playhead; -1 when stopped. */
 	currentStep = $state(-1);
 
@@ -238,10 +242,14 @@ class Sequencer implements TickConsumer {
 	#playStep(index: number, time: number) {
 		const step = this.steps[index];
 		if (!step || !step.on) return;
-		midi.sendNoteOn(step.note, step.velocity, time);
-		// Keep a small gap before the next step so same-pitch notes retrigger cleanly.
-		const gateMs = Math.min(step.gate * this.stepMs, this.stepMs - 4);
-		midi.sendNoteOff(step.note, time + Math.max(10, gateMs));
+		const stepMs = this.stepMs;
+		const swingMs = index % 2 === 1 ? this.swing * stepMs : 0;
+		const t = time + swingMs;
+		// Keep a small gap before the next step so same-pitch notes retrigger
+		// cleanly; a swung note has less room until the (straight) next step.
+		const gateMs = Math.max(10, Math.min(step.gate * stepMs, stepMs - swingMs - 4));
+		midi.sendNoteOn(step.note, step.velocity, t);
+		midi.sendNoteOff(step.note, t + gateMs);
 	}
 
 	// --- serialization -------------------------------------------------------
@@ -254,6 +262,7 @@ class Sequencer implements TickConsumer {
 			name: name.trim() || 'Untitled',
 			length: this.length,
 			ticksPerStep: this.ticksPerStep,
+			swing: this.swing,
 			steps: this.steps.map((s) => ({ ...s }))
 		};
 	}
@@ -263,6 +272,7 @@ class Sequencer implements TickConsumer {
 		this.ticksPerStep = DIVISIONS.some((d) => d.ticksPerStep === file.ticksPerStep)
 			? file.ticksPerStep
 			: 6;
+		this.swing = Math.min(MAX_SWING, Math.max(0, file.swing ?? 0));
 		// Rebuild a full-length step array, tolerating short/partial files.
 		this.steps = Array.from({ length: MAX_STEPS }, (_, i) => {
 			const s = file.steps[i];
@@ -291,11 +301,12 @@ export function parsePattern(text: string): PatternFile {
 		name: typeof obj.name === 'string' ? obj.name : 'Imported',
 		length: typeof obj.length === 'number' ? obj.length : MAX_STEPS,
 		ticksPerStep: typeof obj.ticksPerStep === 'number' ? obj.ticksPerStep : 6,
+		swing: typeof obj.swing === 'number' ? obj.swing : 0,
 		steps
 	};
 }
 
-/** Trigger a browser download of a pattern as a .seq (JSON) file. */
-export function downloadPattern(pattern: PatternFile) {
-	downloadJson(pattern, pattern.name, 'seq', 'pattern');
+/** Save a pattern as a .seq (JSON) file; false = user cancelled the dialog. */
+export function downloadPattern(pattern: PatternFile): Promise<boolean> {
+	return saveJson(pattern, pattern.name, 'seq', 'pattern', 'patterns');
 }
