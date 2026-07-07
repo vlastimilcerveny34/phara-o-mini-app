@@ -15,7 +15,7 @@ import {
 } from './params';
 import { paramState } from './paramState.svelte';
 import { midi, clamp7 } from './midi.svelte';
-import { SNAPSHOT_FORMAT, parseTaggedJson, downloadJson } from './files';
+import { SNAPSHOT_FORMAT, parseTaggedJson, saveJson } from './files';
 
 export { SNAPSHOT_FORMAT };
 export const SNAPSHOT_VERSION = 1;
@@ -49,9 +49,9 @@ export function captureSnapshot(name = 'Untitled'): Snapshot {
 	};
 }
 
-/** Trigger a browser download of the snapshot as a .snp (JSON) file. */
-export function downloadSnapshot(snapshot: Snapshot) {
-	downloadJson(snapshot, snapshot.name, 'snp', 'snapshot');
+/** Save the snapshot as a .snp (JSON) file; false = user cancelled the dialog. */
+export function downloadSnapshot(snapshot: Snapshot): Promise<boolean> {
+	return saveJson(snapshot, snapshot.name, 'snp', 'snapshot', 'patches');
 }
 
 /** Parse + validate an uploaded JSON string into a Snapshot. Throws on bad input. */

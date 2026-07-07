@@ -46,18 +46,56 @@ export function parseTaggedJson(text: string, expected: FileFormat): Record<stri
 	return obj;
 }
 
-/** Trigger a browser download of `data` as pretty-printed JSON named `<name>.<ext>`. */
-export function downloadJson(data: unknown, name: string, ext: string, fallbackName: string) {
+/**
+ * Save `data` as pretty-printed JSON named `<name>.<ext>`.
+ *
+ * Uses the File System Access API's native "Save as" dialog where available
+ * (Chromium — which the app effectively requires anyway, for Web MIDI). The
+ * picker `id` makes the browser remember the last directory per file kind
+ * (patches vs patterns) with no storage on our side. Falls back to a plain
+ * download elsewhere or when the picker fails for any reason other than the
+ * user cancelling.
+ *
+ * Returns false only when the user cancelled the dialog — callers should then
+ * skip their "Saved" feedback.
+ */
+export async function saveJson(
+	data: unknown,
+	name: string,
+	ext: string,
+	fallbackName: string,
+	pickerId: string
+): Promise<boolean> {
 	const json = JSON.stringify(data, null, 2);
+	const fileName = `${safeFileName(name, fallbackName)}.${ext}`;
+
+	if (window.showSaveFilePicker) {
+		try {
+			const handle = await window.showSaveFilePicker({
+				suggestedName: fileName,
+				id: pickerId,
+				types: [{ description: 'Phara-O Mini JSON', accept: { 'application/json': [`.${ext}`] } }]
+			});
+			const writable = await handle.createWritable();
+			await writable.write(json);
+			await writable.close();
+			return true;
+		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') return false; // user cancelled
+			// Anything else (permissions, weird target): fall through to the download.
+		}
+	}
+
 	const blob = new Blob([json], { type: 'application/json' });
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement('a');
 	a.href = url;
-	a.download = `${safeFileName(name, fallbackName)}.${ext}`;
+	a.download = fileName;
 	document.body.appendChild(a);
 	a.click();
 	a.remove();
 	URL.revokeObjectURL(url);
+	return true;
 }
 
 function safeFileName(name: string, fallback: string): string {
