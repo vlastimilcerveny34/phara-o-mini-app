@@ -66,10 +66,19 @@ class MidiService {
 	inputs = $state<MidiPort[]>([]);
 	/** null = no input listened to (default); notes only come from on-screen kbd. */
 	selectedInputId = $state<string | null>(null);
+	/**
+	 * An input port that appeared AFTER the initial enumeration (hot-plugged
+	 * keyboard). The UI offers it as a one-click "use as MIDI in?" toast — we
+	 * never auto-select an input, notes must not start flowing silently.
+	 */
+	newInput = $state<MidiPort | null>(null);
 	/** MIDI channel as shown to the user: 1-16. Wire value is channel-1. */
 	channel = $state(1);
 
 	#access: MIDIAccess | null = null;
+	/** Input ids seen so far; null until the first enumeration (its ports are
+	 * pre-existing, not hot-plugged, so they never trigger the toast). */
+	#knownInputIds: Set<string> | null = null;
 	/** The input we currently have an onmidimessage handler attached to. */
 	#boundInput: MIDIInput | null = null;
 	#noteHandlers = new Set<NoteInputHandler>();
@@ -167,6 +176,17 @@ class MidiService {
 		}
 		this.inputs = list;
 
+		// Surface a hot-plugged input (but not the ports found at first enumeration).
+		if (this.#knownInputIds !== null) {
+			const fresh = list.find((p) => !this.#knownInputIds!.has(p.id));
+			if (fresh && fresh.id !== this.selectedInputId) this.newInput = fresh;
+		}
+		this.#knownInputIds = new Set(list.map((p) => p.id));
+		// Retract the offer if that port vanished again.
+		if (this.newInput && !list.some((p) => p.id === this.newInput!.id)) {
+			this.newInput = null;
+		}
+
 		// If the selected input vanished (unplugged), drop the binding. We never
 		// auto-select an input: notes should only start flowing when the user picks one.
 		if (this.selectedInputId && !this.inputs.some((p) => p.id === this.selectedInputId)) {
@@ -184,7 +204,13 @@ class MidiService {
 	/** Choose which input port to listen to (null = none). Rebinds the handler. */
 	selectInput(id: string | null) {
 		this.selectedInputId = id;
+		if (id !== null && this.newInput?.id === id) this.newInput = null;
 		this.#bindSelectedInput();
+	}
+
+	/** Dismiss the hot-plugged-input offer without selecting it. */
+	dismissNewInput() {
+		this.newInput = null;
 	}
 
 	/** Attach our onmidimessage listener to the selected input, detaching any old one. */

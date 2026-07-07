@@ -21,7 +21,8 @@
 		applySnapshotWithReport,
 		type Snapshot
 	} from '$lib/snapshot';
-	import { FACTORY_PATCHES, factoryToSnapshot } from '$lib/factoryPatches';
+	import { FACTORY_PATCHES, INIT_PATCH, factoryToSnapshot } from '$lib/factoryPatches';
+	import { mutateParams } from '$lib/mutate';
 	import { Feedback } from '$lib/feedback.svelte';
 	import Knob from './Knob.svelte';
 	import MidiSetup from './MidiSetup.svelte';
@@ -59,10 +60,17 @@
 	const feedback = new Feedback();
 	let fileInput: HTMLInputElement;
 
-	function onSave() {
+	async function onSave() {
 		const snap = captureSnapshot(patchName || 'Untitled');
-		downloadSnapshot(snap);
-		feedback.flash('ok', `Saved “${snap.name}”.`);
+		busy = true;
+		const saved = await downloadSnapshot(snap);
+		busy = false;
+		if (saved) feedback.flash('ok', `Saved “${snap.name}”.`);
+	}
+
+	function onMutate() {
+		mutateParams();
+		feedback.flash('ok', 'Mutated — press again to drift further.');
 	}
 
 	async function apply(snap: Snapshot) {
@@ -136,8 +144,22 @@
 		<div class="brand">
 			<strong>Phara-O Mini</strong>
 			<span>editor</span>
-			<span class="led" class:on={ready} title={ready ? midi.selectedPort?.name : 'No MIDI'}
-			></span>
+			<span class="leds">
+				<span
+					class="led-item"
+					title={ready ? `Output: ${midi.selectedPort?.name}` : 'No MIDI output — connect the synth'}
+				>
+					<span class="led" class:on={ready}></span>Out
+				</span>
+				<span
+					class="led-item"
+					title={midi.selectedInput
+						? `Input: ${midi.selectedInput.name}`
+						: 'No MIDI input — pick a keyboard under MIDI'}
+				>
+					<span class="led" class:on={midi.selectedInput !== null}></span>In
+				</span>
+			</span>
 		</div>
 
 		<div class="tempo">
@@ -155,6 +177,18 @@
 			<input type="text" placeholder="Patch name…" bind:value={patchName} aria-label="Patch name" />
 			<button class="mini" onclick={onSave} disabled={busy}>Save</button>
 			<button class="mini" onclick={() => fileInput.click()} disabled={busy}>Load</button>
+			<button
+				class="mini"
+				onclick={() => apply(factoryToSnapshot(INIT_PATCH))}
+				disabled={busy}
+				title={INIT_PATCH.description}>Init</button
+			>
+			<button
+				class="mini"
+				onclick={onMutate}
+				disabled={busy}
+				title="Nudge every knob a little — repeat to drift further">Mutate</button
+			>
 			<select onchange={onFactoryPick} disabled={busy} aria-label="Factory patches">
 				<option value="">Factory…</option>
 				{#each FACTORY_PATCHES as p (p.name)}
@@ -168,7 +202,7 @@
 				onchange={onFileChosen}
 				hidden
 			/>
-			<button class="mini" class:sel={midiOpen} onclick={() => (midiOpen = !midiOpen)}>
+			<button class="mini midi-btn" class:sel={midiOpen} popovertarget="midi-popover">
 				MIDI
 			</button>
 		</div>
@@ -178,7 +212,19 @@
 		<p class="feedback {feedback.message.kind}">{feedback.message.text}</p>
 	{/if}
 
-	{#if midiOpen || (!ready && midi.status !== 'unsupported')}
+	<!-- Anchored popover: light-dismiss (click outside / Esc) replaces the old
+	     click-again-to-close drawer. While not connected the setup panel stays
+	     inline instead, as first-run onboarding. -->
+	<div
+		id="midi-popover"
+		popover="auto"
+		class="midi-pop"
+		ontoggle={(e) => (midiOpen = (e as ToggleEvent).newState === 'open')}
+	>
+		<MidiSetup />
+	</div>
+
+	{#if !ready && midi.status !== 'unsupported'}
 		<div class="drawer">
 			<MidiSetup />
 		</div>
@@ -326,6 +372,21 @@
 		color: var(--text-faint);
 		font-size: 0.8rem;
 	}
+	.leds {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+	}
+	.led-item {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-faint);
+		cursor: default;
+	}
 	.led {
 		width: 9px;
 		height: 9px;
@@ -378,6 +439,25 @@
 	.mini.sel {
 		border-color: var(--accent);
 		color: var(--accent);
+	}
+	.midi-btn {
+		anchor-name: --midi-btn;
+	}
+	/* Anchored under the MIDI button (CSS anchor positioning — Chromium, which
+	   Web MIDI requires anyway; elsewhere the popover falls back to centered). */
+	.midi-pop {
+		position: fixed;
+		position-anchor: --midi-btn;
+		inset: auto;
+		top: calc(anchor(bottom) + 0.45rem);
+		right: anchor(right);
+		width: min(22rem, calc(100vw - 2rem));
+		margin: 0;
+		padding: 0;
+		border: none;
+		background: none;
+		overflow: visible;
+		filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.45));
 	}
 	.feedback {
 		margin: -0.3rem 0 0;

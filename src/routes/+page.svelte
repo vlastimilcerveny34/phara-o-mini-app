@@ -9,6 +9,7 @@
 	import ArpControl from '$lib/components/ArpControl.svelte';
 	import SequencerControl from '$lib/components/SequencerControl.svelte';
 	import SnapshotBar from '$lib/components/SnapshotBar.svelte';
+	import MidiInputToast from '$lib/components/MidiInputToast.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import ContinuousControl from '$lib/components/ContinuousControl.svelte';
 	import SteppedControl from '$lib/components/SteppedControl.svelte';
@@ -42,6 +43,7 @@
 {/snippet}
 
 <div class="page">
+	<MidiInputToast />
 	<header class="masthead">
 		<div>
 			<h1>Phara-O Mini <span>Editor / Librarian</span></h1>
@@ -56,7 +58,10 @@
 			{#if !midi.isReady && midi.status !== 'unsupported'}
 				<span class="pill warn">Not sending — connect MIDI</span>
 			{:else if midi.isReady}
-				<span class="pill live">Live · {midi.selectedPort?.name} · ch {midi.channel}</span>
+				<span class="pill live">
+					Live · {midi.selectedPort?.name} · ch {midi.channel}{#if midi.selectedInput}
+						· in: {midi.selectedInput.name}{/if}
+				</span>
 			{/if}
 			<div class="ui-toggle" role="group" aria-label="UI mode">
 				<button class:sel={uiMode.mode === 'synth'} onclick={() => uiMode.set('synth')}
