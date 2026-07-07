@@ -106,9 +106,9 @@ export async function applySnapshot(snapshot: Snapshot, gapMs = 8): Promise<numb
 export async function applySnapshotWithReport(
 	snapshot: Snapshot
 ): Promise<{ ok: boolean; text: string }> {
-	const sent = await applySnapshot(snapshot); // no-ops on MIDI without a port
+	await applySnapshot(snapshot); // no-ops on MIDI without a port
 	return midi.isReady
-		? { ok: true, text: `Loaded “${snapshot.name}” — sent ${sent} messages to the synth.` }
+		? { ok: true, text: `Loaded “${snapshot.name}”` }
 		: { ok: false, text: `Loaded “${snapshot.name}” into UI, but no MIDI port — nothing sent.` };
 }
 
