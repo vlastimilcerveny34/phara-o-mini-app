@@ -10,10 +10,12 @@ It has two interchangeable faces: a **Synth view** (a one-screen faceplate with
 knobs, the default) and a **Parametric view** (labelled sliders with big numeric
 readouts). Same state underneath — a toggle in the header switches them.
 
-> **Status: beta (0.5.x).** Two UIs (synth-style + parametric), snapshot
-> librarian (with an Init patch), a monophonic step sequencer with step/live
-> recording, an **arpeggiator**, note sources (on-screen keyboard + MIDI input),
-> and **Scale-footage transpose**. More is planned — see [Roadmap](#roadmap).
+> **Status: beta (0.6.x).** Two UIs (synth-style + parametric), snapshot
+> librarian (Init / **Mutate** / factory patches, native file dialogs), a
+> monophonic step sequencer with step/live recording and **swing**, an
+> **arpeggiator**, note sources (on-screen keyboard + MIDI input with hot-plug
+> detection), and **Scale-footage transpose**. More is planned — see
+> [ROADMAP.md](ROADMAP.md).
 
 ## Design premise (read this)
 
@@ -50,7 +52,10 @@ npm run preview    # preview the production build
 
 When the page loads, click **Connect MIDI** and allow the permission prompt.
 The output port whose name contains `PHARA-O` is auto-selected (marked ★); the
-ALSA "Midi Through" port is filtered out.
+ALSA "Midi Through" port is filtered out. Once connected, the setup lives in a
+**popover under the MIDI button** (synth view) and the header shows **Out / In
+status LEDs**. Plugging in a MIDI keyboard later pops a one-click *"use as MIDI
+in?"* toast — an input is never selected silently.
 
 ### Make the synth actually listen
 
@@ -141,7 +146,8 @@ off the transport clock — so it works **regardless of the synth's clock source
 (it only needs MIDI Rx = ON).
 
 - Its own **▶ Play / ■ Stop** in the panel; playing always starts from step 1.
-- 16 steps, adjustable pattern length, rate 1/8 · 1/16 · 1/32.
+- 16 steps, adjustable pattern length, rate 1/8 · 1/16 · 1/32, **swing**
+  (same shuffle feel as the arp's; stored in `.seq` files).
 - Per step: note, velocity and gate length. Velocity is a real **enhancement** —
   the synth's own touch keyboard isn't velocity-sensitive.
 - Live playhead; save/load patterns as `.seq` files. The grid is always editable
@@ -175,10 +181,16 @@ library is effectively unlimited. Patches are **files** (download / upload — n
 browser storage). The librarian sits right under the Global row — pick a patch
 first, then tweak the parameters below.
 
-- **Save / Load patch** — JSON files with a `.snp` extension.
-- **Init** — a neutral one-click starting point (poly, filter open, full
+- **Save / Load patch** — JSON files with a `.snp` extension, through the
+  browser's **native file dialogs** (File System Access API). Save and Load
+  share one remembered directory per file kind — no browser storage on our
+  side; plain download/upload is the fallback outside Chromium.
+- **Init** button — a neutral one-click starting point (poly, filter open, full
   sustain, no effects). Since the app is one-way, this is also the quickest way
   to put the synth into a **known state** that matches the UI.
+- **Mutate** button — nudges every continuous param by a small random offset
+  (with guardrails so the patch never goes silent). Repeated presses compound
+  into a random walk through sound space — a sound-design spark.
 - **10 factory patches** built in (Classic Bass, Sub Bass, Saw Lead, Soft Pad,
   Pluck Keys, Brass Stab, Fifth Lead, Octave Stack, Ring Bell, LFO Sweep) — one
   click applies them (Resonance/Dry-Wet excepted, as those have no CC).
@@ -203,8 +215,10 @@ src/
 │   ├── noteSource.svelte.ts     held-notes layer (keyboard + MIDI in → synth)
 │   ├── sequencer.svelte.ts      monophonic step sequencer + step/live recording
 │   ├── arp.svelte.ts            arpeggiator (modes, octaves, latch, swing)
-│   ├── snapshot.ts              capture / download / parse / apply patches
-│   ├── factoryPatches.ts        Init + 10 built-in starter patches
+│   ├── snapshot.ts              capture / save / parse / apply patches
+│   ├── factoryPatches.ts        INIT_PATCH + 10 built-in starter patches
+│   ├── mutate.ts                Mutate — random param nudges with guardrails
+│   ├── files.ts                 shared file plumbing (native pickers + fallback)
 │   └── components/
 │       ├── SynthView.svelte             faceplate view (knobs + strip + keys)
 │       ├── Knob.svelte                  rotary knob (drag / wheel / keys)
@@ -218,6 +232,7 @@ src/
 │       ├── SequencerControl.svelte
 │       ├── ArpControl.svelte
 │       ├── SnapshotBar.svelte
+│       ├── MidiInputToast.svelte        hot-plugged-keyboard offer (both views)
 │       └── HardwareNote.svelte  (currently unused; earmarked for a Help section)
 └── routes/
     ├── +layout.ts               ssr = false (Web MIDI is browser-only)
@@ -234,12 +249,31 @@ src/
 
 ## Roadmap
 
-- Reconcile the keyboard's **octave shift** with the Scale transpose — two
-  register controls side by side can read as redundant; likely clearer labelling
-  or a combined display.
-- **Polyphonic** steps, **parameter locks**, swing, accents, pattern chaining.
-- Live **clock-source switching over SysEx** (once the SynthTribe message is
-  captured), to avoid the hardware's power-on reboot.
+The full, phased plan lives in [ROADMAP.md](ROADMAP.md). Highlights:
+
+- **Phase 2:** Mutate follow-ups, **mod wheel** (CC 1) as a performance control,
+  patch sharing via URL, **PWA** (installable / offline).
+- **Phase 3:** sequencer v2 — **chords per step, ties, parameter locks**
+  (per-step CC automation lanes); A/B compare + undo; pitch bend (pending
+  hardware verification).
+- **Phase 4:** MIDI learn / CC bridge for external controllers, folder-based
+  patch librarian, external clock sync, patch morph.
+- Longer-standing ideas: reconcile the keyboard's **octave shift** with the
+  Scale transpose display; live **clock-source switching over SysEx** (once the
+  SynthTribe message is captured).
+
+### Done since 0.5.x
+
+- **MIDI setup UX** — anchored popover (light-dismiss), Out/In status LEDs,
+  one-click toast when a MIDI keyboard is hot-plugged.
+- **Native file dialogs** — Save *and* Load share one remembered directory per
+  file kind (patches / patterns).
+- **Init** and **Mutate** buttons in both librarian UIs (Init left the factory
+  bank and became a button).
+- **Sequencer swing**, stored in `.seq` files.
+- Readability polish: lighter faint text (hardware-only params deliberately
+  stay dim), arp strip sliders show values, flash messages no longer reflow
+  the faceplate.
 
 ### Done since 0.4.x
 
