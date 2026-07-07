@@ -43,7 +43,7 @@
 		font-size: 0.6rem;
 		text-transform: uppercase;
 		letter-spacing: 0.07em;
-		color: var(--text-faint);
+		color: var(--text-ghost);
 		border: 1px solid var(--border-strong);
 		border-radius: 4px;
 		padding: 0.1rem 0.35rem;
@@ -52,7 +52,7 @@
 	.note {
 		margin: 0;
 		font-size: 0.74rem;
-		color: var(--text-faint);
+		color: var(--text-ghost);
 		line-height: 1.35;
 	}
 </style>

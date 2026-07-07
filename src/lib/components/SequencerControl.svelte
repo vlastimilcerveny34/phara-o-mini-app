@@ -11,6 +11,7 @@
 		type PatternFile
 	} from '$lib/sequencer.svelte';
 	import { MAX_SWING } from '$lib/transport.svelte';
+	import { openJson } from '$lib/files';
 	import { Feedback } from '$lib/feedback.svelte';
 
 	let patternName = $state('');
@@ -56,18 +57,25 @@
 		if (saved) feedback.flash('ok', 'Pattern saved.');
 	}
 
-	function onPickFile() {
-		fileInput.click();
+	// Prefer the native picker (shares its remembered directory with Save via
+	// the 'patterns' id); the hidden input stays as the non-Chromium fallback.
+	async function onPickFile() {
+		if (!window.showOpenFilePicker) {
+			fileInput.click();
+			return;
+		}
+		try {
+			const text = await openJson('seq', 'patterns');
+			if (text !== null) loadText(text);
+		} catch {
+			feedback.flash('bad', 'Could not read file.');
+		}
 	}
 
-	async function onFileChosen(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = '';
-		if (!file) return;
+	function loadText(text: string) {
 		let pat: PatternFile;
 		try {
-			pat = parsePattern(await file.text());
+			pat = parsePattern(text);
 		} catch (err) {
 			feedback.flash('bad', err instanceof Error ? err.message : 'Could not read file.');
 			return;
@@ -75,6 +83,14 @@
 		sequencer.load(pat);
 		patternName = pat.name;
 		feedback.flash('ok', `Loaded “${pat.name}”.`);
+	}
+
+	async function onFileChosen(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		loadText(await file.text());
 	}
 </script>
 

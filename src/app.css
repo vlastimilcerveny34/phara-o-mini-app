@@ -7,7 +7,10 @@
 	--border-strong: #454d63;
 	--text: #eef1f7;
 	--text-dim: #98a0b3;
-	--text-faint: #6b7284;
+	--text-faint: #8890a4;
+	/* Only for the hardware-only (not app-controllable) params — deliberately
+	   darker than --text-faint so they read as "not yours to touch". */
+	--text-ghost: #6b7284;
 	--accent: #ffb020;
 	--accent-2: #4db6ff;
 	--accent-dim: #7a5410;

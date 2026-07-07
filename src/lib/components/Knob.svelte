@@ -195,7 +195,7 @@
 		font-size: 0.5rem;
 		font-weight: 700;
 		letter-spacing: 0.04em;
-		color: var(--text-faint);
+		color: var(--text-ghost);
 		background: var(--bg-input);
 		border: 1px solid var(--border-strong);
 		border-radius: 4px;

@@ -98,6 +98,28 @@ export async function saveJson(
 	return true;
 }
 
+/**
+ * Open-file counterpart of saveJson: shows the native picker and returns the
+ * file's text, or null when the user cancelled. The shared `pickerId` means
+ * Load opens in the same remembered directory Save last used.
+ *
+ * Only call when `window.showOpenFilePicker` exists — callers keep their
+ * hidden `<input type="file">` as the fallback path. Non-cancel errors throw;
+ * the caller surfaces them like a parse failure.
+ */
+export async function openJson(ext: string, pickerId: string): Promise<string | null> {
+	try {
+		const [handle] = await window.showOpenFilePicker!({
+			id: pickerId,
+			types: [{ description: 'Phara-O Mini JSON', accept: { 'application/json': [`.${ext}`] } }]
+		});
+		return await handle.getFile().then((f) => f.text());
+	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return null; // user cancelled
+		throw err;
+	}
+}
+
 function safeFileName(name: string, fallback: string): string {
 	return name.replace(/[^a-z0-9-_]+/gi, '_').replace(/^_+|_+$/g, '') || fallback;
 }

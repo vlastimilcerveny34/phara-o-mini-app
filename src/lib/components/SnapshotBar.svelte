@@ -7,6 +7,7 @@
 		type Snapshot
 	} from '$lib/snapshot';
 	import { FACTORY_PATCHES, INIT_PATCH, factoryToSnapshot, type FactoryPatch } from '$lib/factoryPatches';
+	import { openJson } from '$lib/files';
 	import { mutateParams } from '$lib/mutate';
 	import { Feedback } from '$lib/feedback.svelte';
 
@@ -29,8 +30,19 @@
 		feedback.flash('ok', 'Mutated — press again to drift further.');
 	}
 
-	function onPickFile() {
-		fileInput.click();
+	// Prefer the native picker (shares its remembered directory with Save via
+	// the 'patches' id); the hidden input stays as the non-Chromium fallback.
+	async function onPickFile() {
+		if (!window.showOpenFilePicker) {
+			fileInput.click();
+			return;
+		}
+		try {
+			const text = await openJson('snp', 'patches');
+			if (text !== null) await loadText(text);
+		} catch {
+			feedback.flash('bad', 'Could not read file.');
+		}
 	}
 
 	async function apply(snap: Snapshot) {
@@ -41,20 +53,23 @@
 		feedback.flash(result.ok ? 'ok' : 'bad', result.text);
 	}
 
-	async function onFileChosen(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = ''; // allow re-selecting the same file later
-		if (!file) return;
-
+	async function loadText(text: string) {
 		let snap: Snapshot;
 		try {
-			snap = parseSnapshot(await file.text());
+			snap = parseSnapshot(text);
 		} catch (err) {
 			feedback.flash('bad', err instanceof Error ? err.message : 'Could not read file.');
 			return;
 		}
 		await apply(snap);
+	}
+
+	async function onFileChosen(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = ''; // allow re-selecting the same file later
+		if (!file) return;
+		await loadText(await file.text());
 	}
 
 	async function onFactory(p: FactoryPatch) {

@@ -22,6 +22,7 @@
 		type Snapshot
 	} from '$lib/snapshot';
 	import { FACTORY_PATCHES, INIT_PATCH, factoryToSnapshot } from '$lib/factoryPatches';
+	import { openJson } from '$lib/files';
 	import { mutateParams } from '$lib/mutate';
 	import { Feedback } from '$lib/feedback.svelte';
 	import Knob from './Knob.svelte';
@@ -81,19 +82,38 @@
 		feedback.flash(result.ok ? 'ok' : 'bad', result.text);
 	}
 
-	async function onFileChosen(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = '';
-		if (!file) return;
+	// Prefer the native picker (shares its remembered directory with Save via
+	// the 'patches' id); the hidden input stays as the non-Chromium fallback.
+	async function onPickFile() {
+		if (!window.showOpenFilePicker) {
+			fileInput.click();
+			return;
+		}
+		try {
+			const text = await openJson('snp', 'patches');
+			if (text !== null) await loadText(text);
+		} catch {
+			feedback.flash('bad', 'Could not read file.');
+		}
+	}
+
+	async function loadText(text: string) {
 		let snap: Snapshot;
 		try {
-			snap = parseSnapshot(await file.text());
+			snap = parseSnapshot(text);
 		} catch (err) {
 			feedback.flash('bad', err instanceof Error ? err.message : 'Could not read file.');
 			return;
 		}
 		await apply(snap);
+	}
+
+	async function onFileChosen(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		await loadText(await file.text());
 	}
 
 	async function onFactoryPick(e: Event) {
@@ -176,7 +196,7 @@
 		<div class="patch">
 			<input type="text" placeholder="Patch name…" bind:value={patchName} aria-label="Patch name" />
 			<button class="mini" onclick={onSave} disabled={busy}>Save</button>
-			<button class="mini" onclick={() => fileInput.click()} disabled={busy}>Load</button>
+			<button class="mini" onclick={onPickFile} disabled={busy}>Load</button>
 			<button
 				class="mini"
 				onclick={() => apply(factoryToSnapshot(INIT_PATCH))}
@@ -205,12 +225,13 @@
 			<button class="mini midi-btn" class:sel={midiOpen} popovertarget="midi-popover">
 				MIDI
 			</button>
+			<!-- Floats below the patch buttons — absolutely positioned so its
+			     appearing/vanishing never reflows the faceplate. -->
+			{#if feedback.message}
+				<p class="feedback {feedback.message.kind}">{feedback.message.text}</p>
+			{/if}
 		</div>
 	</header>
-
-	{#if feedback.message}
-		<p class="feedback {feedback.message.kind}">{feedback.message.text}</p>
-	{/if}
 
 	<!-- Anchored popover: light-dismiss (click outside / Esc) replaces the old
 	     click-again-to-close drawer. While not connected the setup panel stays
@@ -302,11 +323,11 @@
 				<span>Latch</span>
 			</label>
 			<label>
-				<span>Gate</span>
+				<span>Gate <em>{Math.round(arp.gate * 100)}%</em></span>
 				<input type="range" min="0.05" max="1" step="0.05" bind:value={arp.gate} />
 			</label>
 			<label>
-				<span>Swing</span>
+				<span>Swing <em>{Math.round(arp.swing * 100)}%</em></span>
 				<input type="range" min="0" max={MAX_SWING} step="0.05" bind:value={arp.swing} />
 			</label>
 			<label>
@@ -319,7 +340,7 @@
 			</label>
 			{#if arp.velocityMode !== 'played'}
 				<label>
-					<span>Lvl</span>
+					<span>Lvl <em>{arp.velocity}</em></span>
 					<input type="range" min="1" max="127" bind:value={arp.velocity} />
 				</label>
 			{/if}
@@ -403,6 +424,7 @@
 		--knob-w: 5rem;
 	}
 	.patch {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
@@ -460,14 +482,25 @@
 		filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.45));
 	}
 	.feedback {
-		margin: -0.3rem 0 0;
+		position: absolute;
+		top: calc(100% + 0.45rem);
+		right: 0;
+		z-index: 20;
+		margin: 0;
 		font-size: 0.8rem;
+		background: var(--bg-panel-2);
+		border-radius: 7px;
+		padding: 0.35rem 0.65rem;
+		max-width: min(32rem, 85vw);
+		box-shadow: 0 5px 18px rgba(0, 0, 0, 0.4);
 	}
 	.feedback.ok {
 		color: var(--ok);
+		border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
 	}
 	.feedback.bad {
 		color: var(--danger);
+		border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
 	}
 	.drawer {
 		border-radius: var(--radius);
@@ -559,6 +592,7 @@
 	.arp-set.dim {
 		opacity: 0.55;
 	}
+	/* Same tone + weight as the knob labels, so the strip reads as one panel. */
 	.arp-set label {
 		display: flex;
 		align-items: center;
@@ -566,7 +600,15 @@
 		font-size: 0.62rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-faint);
+		color: var(--text-dim);
+		font-weight: 650;
+	}
+	.arp-set em {
+		font-style: normal;
+		font-weight: 400;
+		color: var(--text);
+		font-family: var(--mono);
+		font-variant-numeric: tabular-nums;
 	}
 	.arp-set select {
 		background: var(--bg-input);
